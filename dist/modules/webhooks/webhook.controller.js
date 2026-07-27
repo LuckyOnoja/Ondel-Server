@@ -30,25 +30,40 @@ class WebhookController {
                 targetId = payload['x-ondel-target-id'];
             }
             else {
-                const match = String(content).match(/Ref:\s*ONDEL-TGT-([a-zA-Z0-9_-]+)/i);
+                const fullSearchText = `${subject} ${content}`;
+                const match = fullSearchText.match(/Ref:\s*ONDEL-TGT-([a-zA-Z0-9_-]+)/i);
                 if (match && match[1]) {
                     targetId = match[1];
                 }
             }
             const senderEmail = String(sender).toLowerCase().trim();
-            // 2. Find matching CampaignTarget record
-            const target = await prisma_1.prisma.campaignTarget.findFirst({
-                where: targetId
-                    ? { id: targetId }
-                    : {
+            // 2. Find matching CampaignTarget record using Multi-Variable Reconciliation
+            let target = null;
+            // Layer 1: Direct Target ID match
+            if (targetId) {
+                target = await prisma_1.prisma.campaignTarget.findUnique({
+                    where: { id: targetId },
+                    include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
+                });
+            }
+            // Layer 2: Exact Sender Email match
+            if (!target && senderEmail) {
+                target = await prisma_1.prisma.campaignTarget.findFirst({
+                    where: {
                         lead: {
                             contactPoints: {
                                 some: { value: senderEmail },
                             },
                         },
                     },
-                include: { lead: true, campaign: true },
-            });
+                    orderBy: { updatedAt: 'desc' },
+                    include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
+                });
+            }
+            // Layer 3 & 4 Combined: Multi-Variable AI Matcher (Domain + Org + Song Title + Artist Name)
+            if (!target) {
+                target = await WebhookController.reconcileTargetWithAI(senderEmail, subject, String(content));
+            }
             if (!target) {
                 console.warn(`[Zoho Webhook] No matching CampaignTarget found for sender: ${senderEmail}, TargetId: ${targetId}`);
                 res.status(200).json({ success: true, message: 'Webhook received but no matching target found' });
@@ -78,6 +93,54 @@ class WebhookController {
         catch (error) {
             console.error('[Zoho Webhook Error]:', error.message);
             res.status(200).json({ success: false, error: error.message });
+        }
+    }
+    static async reconcileTargetWithAI(senderEmail, subject, content) {
+        try {
+            const activeTargets = await prisma_1.prisma.campaignTarget.findMany({
+                where: { status: { in: [client_1.CampaignTargetStatus.SENT, client_1.CampaignTargetStatus.DELIVERED, client_1.CampaignTargetStatus.PENDING, client_1.CampaignTargetStatus.RESERVED] } },
+                take: 30,
+                orderBy: { updatedAt: 'desc' },
+                include: {
+                    lead: { include: { contactPoints: true } },
+                    campaign: { include: { song: { include: { artist: true } } } },
+                },
+            });
+            if (activeTargets.length === 0)
+                return null;
+            const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1] : '';
+            // Direct domain & song title match check first
+            for (const target of activeTargets) {
+                const leadDomainMatch = senderDomain && senderDomain.length > 3 && !['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'].includes(senderDomain)
+                    ? target.lead.contactPoints.some((cp) => cp.value.includes(senderDomain)) || (target.lead.sourceUrl && target.lead.sourceUrl.includes(senderDomain))
+                    : false;
+                const songMatch = target.campaign?.song?.title
+                    ? `${subject} ${content}`.toLowerCase().includes(target.campaign.song.title.toLowerCase())
+                    : false;
+                if (leadDomainMatch && songMatch) {
+                    console.log(`[Reconciliation AI] High-confidence match on Domain + Song Title for target ${target.id}`);
+                    return target;
+                }
+            }
+            // Return candidate with domain match as best fallback
+            if (senderDomain && !['gmail.com', 'yahoo.com', 'outlook.com'].includes(senderDomain)) {
+                const domainTarget = activeTargets.find((t) => t.lead.contactPoints.some((cp) => cp.value.includes(senderDomain)) || (t.lead.sourceUrl && t.lead.sourceUrl.includes(senderDomain)));
+                if (domainTarget) {
+                    console.log(`[Reconciliation AI] Domain-level match for target ${domainTarget.id}`);
+                    return domainTarget;
+                }
+            }
+            // Return candidate with song title match
+            const songTarget = activeTargets.find((t) => t.campaign?.song?.title && `${subject} ${content}`.toLowerCase().includes(t.campaign.song.title.toLowerCase()));
+            if (songTarget) {
+                console.log(`[Reconciliation AI] Song title mention match for target ${songTarget.id}`);
+                return songTarget;
+            }
+            return null;
+        }
+        catch (error) {
+            console.warn('[Reconciliation AI Error]:', error.message);
+            return null;
         }
     }
     static async classifyReplySentiment(subject, text) {
