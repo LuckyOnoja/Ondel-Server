@@ -8,7 +8,14 @@ export class WebhookController {
 
   static async handleZohoEmailWebhook(req: Request, res: Response): Promise<void> {
     try {
-      console.log('[Zoho Webhook] Received incoming email payload:', JSON.stringify(req.body, null, 2));
+      console.log('\n====================================================');
+      console.log('📩 [ZOHO WEBHOOK EVENT RECEIVED]');
+      console.log('Timestamp:', new Date().toISOString());
+      console.log('Method:', req.method);
+      console.log('Headers:', JSON.stringify(req.headers, null, 2));
+      console.log('Query Params:', JSON.stringify(req.query, null, 2));
+      console.log('Body Payload:', JSON.stringify(req.body, null, 2));
+      console.log('====================================================\n');
 
       const payload = req.body || {};
       const sender = payload.fromAddress || payload.sender || payload.from || payload.user_id || '';

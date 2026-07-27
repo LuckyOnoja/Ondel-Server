@@ -4,5 +4,7 @@ const express_1 = require("express");
 const webhook_controller_1 = require("./webhook.controller");
 const router = (0, express_1.Router)();
 router.post('/zoho-email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
+router.get('/zoho-email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
 router.post('/email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
+router.get('/email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
 exports.default = router;

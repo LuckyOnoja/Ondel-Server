@@ -4,6 +4,8 @@ import { WebhookController } from './webhook.controller';
 const router = Router();
 
 router.post('/zoho-email', WebhookController.handleZohoEmailWebhook);
+router.get('/zoho-email', WebhookController.handleZohoEmailWebhook);
 router.post('/email', WebhookController.handleZohoEmailWebhook);
+router.get('/email', WebhookController.handleZohoEmailWebhook);
 
 export default router;
