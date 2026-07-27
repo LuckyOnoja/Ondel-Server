@@ -20,16 +20,40 @@ export class CrawlerService {
       return null;
     }
 
+    let targetUrl = url;
+    let response;
+
     try {
-      const response = await axios.get(url, {
+      response = await axios.get(targetUrl, {
         timeout: 10000,
         headers: {
-          'User-Agent': this.USER_AGENT,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
       });
+    } catch (err) {
+      // Fallback to root domain if specific path fails (e.g., 404 on /submit)
+      try {
+        const rootUrl = new URL(url).origin;
+        if (rootUrl !== url) {
+          targetUrl = rootUrl;
+          response = await axios.get(targetUrl, {
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
+          });
+        } else {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
 
-      const contentType = String(response.headers['content-type'] || '');
+    try {
+      const contentType = String(response?.headers['content-type'] || '');
       if (!contentType.includes('text/html')) {
         return null;
       }

@@ -48,15 +48,41 @@ class CrawlerService {
         if (!crawl_policy_1.CrawlPolicy.shouldCrawl(url)) {
             return null;
         }
+        let targetUrl = url;
+        let response;
         try {
-            const response = await axios_1.default.get(url, {
+            response = await axios_1.default.get(targetUrl, {
                 timeout: 10000,
                 headers: {
-                    'User-Agent': this.USER_AGENT,
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 },
             });
-            const contentType = String(response.headers['content-type'] || '');
+        }
+        catch (err) {
+            // Fallback to root domain if specific path fails (e.g., 404 on /submit)
+            try {
+                const rootUrl = new URL(url).origin;
+                if (rootUrl !== url) {
+                    targetUrl = rootUrl;
+                    response = await axios_1.default.get(targetUrl, {
+                        timeout: 10000,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        },
+                    });
+                }
+                else {
+                    return null;
+                }
+            }
+            catch {
+                return null;
+            }
+        }
+        try {
+            const contentType = String(response?.headers['content-type'] || '');
             if (!contentType.includes('text/html')) {
                 return null;
             }

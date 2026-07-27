@@ -25,7 +25,9 @@ class DiscoveryPipelineService {
             for (const query of queries) {
                 if (leadsFound >= targetCount)
                     break;
+                console.log(`[DiscoveryPipeline] Query: "${query}" -> Fetching search results...`);
                 const searchResults = await this.searchProvider.search(query, { limit: 10 });
+                console.log(`[DiscoveryPipeline] Found ${searchResults.length} search result URLs.`);
                 for (const res of searchResults) {
                     if (leadsFound >= targetCount)
                         break;
@@ -33,10 +35,21 @@ class DiscoveryPipelineService {
                     if (!canonicalUrl || discoveredUrls.has(canonicalUrl))
                         continue;
                     discoveredUrls.add(canonicalUrl);
+                    console.log(`[DiscoveryPipeline] Crawling URL (${discoveredUrls.size}): ${canonicalUrl}`);
                     // 2. Crawl public page & subpages
                     const crawlData = await crawler_service_1.CrawlerService.crawlPage(canonicalUrl);
-                    if (!crawlData || crawlData.contacts.length === 0)
+                    if (!crawlData) {
+                        console.log(`[DiscoveryPipeline] Could not crawl ${canonicalUrl}`);
                         continue;
+                    }
+                    if (crawlData.contacts.length === 0) {
+                        crawlData.contacts.push({
+                            type: client_1.ContactPointType.WEBSITE,
+                            value: canonicalUrl,
+                            isPublic: true,
+                        });
+                    }
+                    console.log(`[DiscoveryPipeline] Extracted ${crawlData.contacts.length} contact points from ${canonicalUrl}. Running AI enrichment...`);
                     // 3. AI Enrichment (DeepSeek + Gemini fallback)
                     const primaryGenre = genres[0] || 'Music';
                     const aiResult = await this.aiProvider.enrichLeadContent(crawlData.title, crawlData.text, primaryGenre);
