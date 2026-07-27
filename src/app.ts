@@ -2,6 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import leadRoutes from './modules/leads/lead.routes.js';
+import discoveryRoutes from './modules/discovery/discovery.routes.js';
+import creditRoutes from './modules/credits/credit.routes.js';
+import matchingRoutes from './modules/matching/matching.routes.js';
+import campaignRoutes from './modules/campaigns/campaign.routes.js';
+import webhookRoutes from './modules/webhooks/webhook.routes.js';
 
 export const app = express();
 
@@ -26,6 +32,14 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/v1/leads', leadRoutes);
+app.use('/api/leads', leadRoutes);
+app.use('/api/v1/discovery', discoveryRoutes);
+app.use('/api/v1/credits', creditRoutes);
+app.use('/api/v1/matching', matchingRoutes);
+app.use('/api/v1/campaigns', campaignRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // 404 Handler
 app.use((req, res) => {

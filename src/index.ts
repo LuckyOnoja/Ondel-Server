@@ -1,6 +1,7 @@
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { prisma } from './config/prisma.js';
+import { startReplyListenerCron } from './jobs/reply-listener.job.js';
 
 const PORT = parseInt(env.PORT, 10) || 8000;
 
@@ -9,6 +10,9 @@ async function bootstrap() {
     // Verify database connection
     await prisma.$connect();
     console.log('✅ [PostgreSQL] Connected to database via Prisma successfully');
+
+    // Start background Zoho IMAP reply listener cron (commented out - using Zoho Webhooks)
+    // startReplyListenerCron();
 
     app.listen(PORT, () => {
       console.log(`🚀 [Server] Ondel API Server running at http://localhost:${PORT}`);

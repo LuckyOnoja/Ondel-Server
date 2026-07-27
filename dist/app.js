@@ -8,6 +8,12 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const authRoutes_js_1 = __importDefault(require("./routes/authRoutes.js"));
 const userRoutes_js_1 = __importDefault(require("./routes/userRoutes.js"));
+const lead_routes_js_1 = __importDefault(require("./modules/leads/lead.routes.js"));
+const discovery_routes_js_1 = __importDefault(require("./modules/discovery/discovery.routes.js"));
+const credit_routes_js_1 = __importDefault(require("./modules/credits/credit.routes.js"));
+const matching_routes_js_1 = __importDefault(require("./modules/matching/matching.routes.js"));
+const campaign_routes_js_1 = __importDefault(require("./modules/campaigns/campaign.routes.js"));
+const webhook_routes_js_1 = __importDefault(require("./modules/webhooks/webhook.routes.js"));
 exports.app = (0, express_1.default)();
 // Global Middlewares
 exports.app.use((0, cors_1.default)({
@@ -27,6 +33,14 @@ exports.app.get('/health', (req, res) => {
 // API Routes
 exports.app.use('/api/auth', authRoutes_js_1.default);
 exports.app.use('/api/users', userRoutes_js_1.default);
+exports.app.use('/api/v1/leads', lead_routes_js_1.default);
+exports.app.use('/api/leads', lead_routes_js_1.default);
+exports.app.use('/api/v1/discovery', discovery_routes_js_1.default);
+exports.app.use('/api/v1/credits', credit_routes_js_1.default);
+exports.app.use('/api/v1/matching', matching_routes_js_1.default);
+exports.app.use('/api/v1/campaigns', campaign_routes_js_1.default);
+exports.app.use('/api/v1/webhooks', webhook_routes_js_1.default);
+exports.app.use('/api/webhooks', webhook_routes_js_1.default);
 // 404 Handler
 exports.app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint not found' });

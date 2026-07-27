@@ -20,6 +20,73 @@ enum Role {
   ADMIN
 }
 
+enum LeadCategory {
+  PLAYLIST_CURATOR
+  RADIO_STATION
+  RADIO_DJ
+  MUSIC_DJ
+  RECORD_LABEL
+  A_AND_R
+  MUSIC_BLOG
+  MUSIC_PUBLICATION
+  YOUTUBE_CHANNEL
+  PODCAST
+  MUSIC_INFLUENCER
+  MUSIC_PROMOTER
+  MUSIC_SUPERVISOR
+  OTHER
+}
+
+enum LeadStatus {
+  DISCOVERED
+  PROCESSING
+  VERIFIED
+  INVALID
+  BLOCKED
+  UNSUBSCRIBED
+}
+
+enum ContactPointType {
+  EMAIL
+  SUBMISSION_FORM
+  WEBSITE
+  INSTAGRAM
+  YOUTUBE
+  TIKTOK
+  LINKEDIN
+  X
+  SPOTIFY
+  OTHER
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  RESERVE
+  CONSUME
+  REFUND
+  ADJUSTMENT
+}
+
+enum CampaignStatus {
+  DRAFT
+  RESERVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignTargetStatus {
+  RESERVED
+  PENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  REPLIED
+  INTERESTED
+  ACCEPTED
+  UNSUBSCRIBED
+}
+
 model User {
   id           String        @id @default(uuid())
   email        String        @unique
@@ -33,7 +100,10 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  workspaces   WorkspaceMember[]
+  workspaces    WorkspaceMember[]
+  artists       Artist[]
+  creditAccount CreditAccount?
+  campaigns     Campaign[]
 
   @@map("users")
 }
@@ -79,4 +149,174 @@ model Release {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("releases")
+}
+
+model Lead {
+  id                 String           @id @default(cuid())
+  name               String?
+  organization       String?
+  category           LeadCategory
+  country            String?
+  city               String?
+  genres             String[]
+  acceptsSubmissions Boolean          @default(false)
+  status             LeadStatus       @default(DISCOVERED)
+  relevanceScore     Float?
+  sourceUrl          String?
+  sourceType         String?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  contactPoints      ContactPoint[]
+  sources            LeadSource[]
+  tags               LeadTag[]
+  campaignTargets    CampaignTarget[]
+
+  @@index([category])
+  @@index([country])
+  @@index([status])
+  @@map("leads")
+}
+
+model ContactPoint {
+  id             String           @id @default(cuid())
+  leadId         String
+  type           ContactPointType
+  value          String
+  normalized     String
+  isPublic       Boolean          @default(true)
+  isVerified     Boolean          @default(false)
+  verification   Json?
+  lastVerifiedAt DateTime?
+
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([type, normalized])
+  @@map("contact_points")
+}
+
+model LeadSource {
+  id           String   @id @default(cuid())
+  leadId       String
+  url          String
+  sourceType   String
+  discoveredAt DateTime @default(now())
+
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, url])
+  @@map("lead_sources")
+}
+
+model LeadTag {
+  id     String @id @default(cuid())
+  leadId String
+  tag    String
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, tag])
+  @@map("lead_tags")
+}
+
+model Artist {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  bio       String?
+  genres    String[]
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  songs     Song[]
+
+  @@map("artists")
+}
+
+model Song {
+  id        String   @id @default(cuid())
+  artistId  String
+  title     String
+  genre     String
+  subgenres String[]
+  audioUrl  String?
+  epkUrl    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  artist    Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  campaigns Campaign[]
+
+  @@map("songs")
+}
+
+model CreditAccount {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("credit_accounts")
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  accountId     String
+  type          CreditTransactionType
+  amount        Int
+  referenceType String?
+  referenceId   String?
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  account CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model Campaign {
+  id               String               @id @default(cuid())
+  userId           String
+  songId           String
+  goal             String
+  targetCategories LeadCategory[]
+  targetGenres     String[]
+  targetCountries  String[]
+  status           CampaignStatus       @default(DRAFT)
+  budgetCredits    Int
+  consumedCredits  Int                  @default(0)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  song    Song             @relation(fields: [songId], references: [id], onDelete: Cascade)
+  targets CampaignTarget[]
+
+  @@map("campaigns")
+}
+
+model CampaignTarget {
+  id              String               @id @default(cuid())
+  campaignId      String
+  leadId          String
+  status          CampaignTargetStatus @default(RESERVED)
+  creditsReserved Int                  @default(1)
+  creditsConsumed Int                  @default(0)
+  sentAt          DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, leadId])
+  @@map("campaign_targets")
 }

@@ -1,0 +1,8 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const webhook_controller_1 = require("./webhook.controller");
+const router = (0, express_1.Router)();
+router.post('/zoho-email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
+router.post('/email', webhook_controller_1.WebhookController.handleZohoEmailWebhook);
+exports.default = router;
