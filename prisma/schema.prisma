@@ -87,6 +87,13 @@ enum CampaignTargetStatus {
   UNSUBSCRIBED
 }
 
+enum KeywordStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id           String        @id @default(uuid())
   email        String        @unique
@@ -319,4 +326,21 @@ model CampaignTarget {
 
   @@unique([campaignId, leadId])
   @@map("campaign_targets")
+}
+
+model DiscoveryKeyword {
+  id          String        @id @default(cuid())
+  keyword     String        @unique
+  category    LeadCategory
+  genre       String
+  country     String?
+  status      KeywordStatus @default(PENDING)
+  leadsFound  Int           @default(0)
+  lastUsedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([category, genre])
+  @@index([status])
+  @@map("discovery_keywords")
 }

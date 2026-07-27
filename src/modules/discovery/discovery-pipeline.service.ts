@@ -1,13 +1,13 @@
-import { LeadCategory, LeadStatus, ContactPointType } from '@prisma/client';
-import { QueryBuilder } from '../../providers/search/query-builder';
+import { LeadCategory, LeadStatus, ContactPointType, KeywordStatus } from '@prisma/client';
 import { FreeSearchProvider } from '../../providers/search/free-search.provider';
 import { UrlNormalizer } from '../../providers/search/url-normalizer';
 import { CrawlerService } from '../crawling/crawler.service';
 import { DeepSeekGeminiAIProvider } from '../../providers/ai/deepseek-gemini.provider';
 import { VerificationService } from '../verification/verification.service';
 import { LeadRepository } from '../leads/lead.repository';
+import { KeywordGeneratorService } from './keyword-generator.service';
+import { KeywordRepository } from './keyword.repository';
 import { JobTracker } from './job-tracker';
-import { prisma } from '../../config/prisma';
 
 export interface DiscoveryOptions {
   jobId: string;
@@ -26,19 +26,35 @@ export class DiscoveryPipelineService {
     JobTracker.updateProgress(jobId, { status: 'RUNNING' });
 
     try {
-      // 1. Generate search queries
-      const queries = QueryBuilder.generateQueries({ categories, genres, countries });
-      console.log(`[DiscoveryPipeline] Job ${jobId}: Generated ${queries.length} search queries.`);
+      // 1. Generate & Ledger AI Long-Tail Keywords if DB pending keywords are low
+      const primaryCategory = categories[0] || LeadCategory.PLAYLIST_CURATOR;
+      const primaryGenre = genres[0] || 'Afrobeats';
+
+      let pendingKeywords = await KeywordRepository.findPendingKeywords(primaryCategory, primaryGenre, 30);
+
+      if (pendingKeywords.length < 5) {
+        console.log(`[DiscoveryPipeline] Pending keywords low for ${primaryCategory}/${primaryGenre}. Triggering AI Keyword Generator...`);
+        await KeywordGeneratorService.generateAndStoreKeywords({ categories, genres, countries });
+        pendingKeywords = await KeywordRepository.findPendingKeywords(primaryCategory, primaryGenre, 30);
+      }
+
+      console.log(`[DiscoveryPipeline] Job ${jobId}: Loaded ${pendingKeywords.length} pending search keywords from database ledger.`);
 
       const discoveredUrls = new Set<string>();
       let leadsFound = 0;
 
-      for (const query of queries) {
+      // 2. Continuous Discovery Loop over Keyword Ledger
+      for (const kwRecord of pendingKeywords) {
         if (leadsFound >= targetCount) break;
 
-        console.log(`[DiscoveryPipeline] Query: "${query}" -> Fetching search results...`);
-        const searchResults = await this.searchProvider.search(query, { limit: 10 });
-        console.log(`[DiscoveryPipeline] Found ${searchResults.length} search result URLs.`);
+        await KeywordRepository.updateKeywordStatus(kwRecord.id, KeywordStatus.PROCESSING);
+        console.log(`\n----------------------------------------------------`);
+        console.log(`[DiscoveryPipeline] Processing Keyword [${kwRecord.id}]: "${kwRecord.keyword}"`);
+
+        const searchResults = await this.searchProvider.search(kwRecord.keyword, { limit: 10 });
+        console.log(`[DiscoveryPipeline] Search provider returned ${searchResults.length} candidate URLs.`);
+
+        let keywordLeadsCount = 0;
 
         for (const res of searchResults) {
           if (leadsFound >= targetCount) break;
@@ -47,8 +63,9 @@ export class DiscoveryPipelineService {
           if (!canonicalUrl || discoveredUrls.has(canonicalUrl)) continue;
           discoveredUrls.add(canonicalUrl);
 
-          console.log(`[DiscoveryPipeline] Crawling URL (${discoveredUrls.size}): ${canonicalUrl}`);
-          // 2. Crawl public page & subpages
+          console.log(`[DiscoveryPipeline] Crawling Web Target: ${canonicalUrl}`);
+
+          // Crawl public page & subpages (/contact, /submit, /about, /demo, /team)
           const crawlData = await CrawlerService.crawlPage(canonicalUrl);
           if (!crawlData) {
             console.log(`[DiscoveryPipeline] Could not crawl ${canonicalUrl}`);
@@ -63,10 +80,9 @@ export class DiscoveryPipelineService {
             });
           }
 
-          console.log(`[DiscoveryPipeline] Extracted ${crawlData.contacts.length} contact points from ${canonicalUrl}. Running AI enrichment...`);
+          console.log(`[DiscoveryPipeline] Extracted ${crawlData.contacts.length} contact points from ${canonicalUrl}. Running DeepSeek/Gemini AI enrichment...`);
 
-          // 3. AI Enrichment (DeepSeek + Gemini fallback)
-          const primaryGenre = genres[0] || 'Music';
+          // AI Enrichment
           const aiResult = await this.aiProvider.enrichLeadContent(crawlData.title, crawlData.text, primaryGenre);
 
           const finalCategory = aiResult?.category || categories[0] || LeadCategory.PLAYLIST_CURATOR;
@@ -74,7 +90,7 @@ export class DiscoveryPipelineService {
           const orgName = aiResult?.organization || res.domain;
           const allGenres = [...new Set([...genres, ...(aiResult?.genres || [])])];
 
-          // 4. Verify contact emails
+          // Verify contact emails
           const verifiedContactPoints = [];
           for (const cp of crawlData.contacts) {
             let isVerified = false;
@@ -95,13 +111,13 @@ export class DiscoveryPipelineService {
             });
           }
 
-          // 5. Store lead with deduplicated contact points
+          // Save lead to Render PostgreSQL
           try {
             const lead = await LeadRepository.create({
               name: leadName,
               organization: orgName,
               category: finalCategory,
-              country: countries?.[0],
+              country: countries?.[0] || kwRecord.country || 'Global',
               genres: allGenres,
               acceptsSubmissions: aiResult?.acceptsSubmissions ?? true,
               status: LeadStatus.VERIFIED,
@@ -109,18 +125,22 @@ export class DiscoveryPipelineService {
               sourceType: 'WEB_SEARCH',
               metadata: {
                 aiEvidence: aiResult?.evidence || [],
-                confidence: aiResult?.confidence || 0.8,
-                discoveredByQuery: query,
+                confidence: aiResult?.confidence || 0.85,
+                discoveredByKeyword: kwRecord.keyword,
               },
               contactPoints: verifiedContactPoints,
               tags: [primaryGenre.toLowerCase(), finalCategory.toLowerCase()],
             });
 
             leadsFound++;
+            keywordLeadsCount++;
+
             JobTracker.updateProgress(jobId, {
               processedCount: discoveredUrls.size,
               leadsFoundCount: leadsFound,
             });
+
+            console.log(`✅ [DiscoveryPipeline] Discovered & Saved Lead #${leadsFound}: "${lead.name}" (${lead.organization}) -> ${lead.contactPoints.length} Contact Points.`);
 
             const currentJob = JobTracker.getJob(jobId);
             if (currentJob) {
@@ -133,16 +153,18 @@ export class DiscoveryPipelineService {
               });
             }
           } catch (dbErr: any) {
-            // Safe fallback if contact unique constraint hit (existing lead)
-            console.log(`[DiscoveryPipeline] Contact already exists or duplicate:`, dbErr.message);
+            console.log(`[DiscoveryPipeline] Contact point already exists in database (skipped duplicate).`);
           }
         }
+
+        // Mark keyword COMPLETED in database
+        await KeywordRepository.updateKeywordStatus(kwRecord.id, KeywordStatus.COMPLETED, keywordLeadsCount);
       }
 
       JobTracker.updateProgress(jobId, { status: 'COMPLETED' });
-      console.log(`[DiscoveryPipeline] Job ${jobId} finished. Found ${leadsFound} leads.`);
+      console.log(`\n🎉 [DiscoveryPipeline] Job ${jobId} finished! Successfully acquired ${leadsFound} new verified leads.`);
     } catch (error: any) {
-      console.error(`[DiscoveryPipeline] Job ${jobId} failed:`, error.message);
+      console.error(`❌ [DiscoveryPipeline] Job ${jobId} failed:`, error.message);
       JobTracker.updateProgress(jobId, { status: 'FAILED', error: error.message });
     }
   }
