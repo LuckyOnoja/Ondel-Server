@@ -5,16 +5,38 @@ const prisma_1 = require("../../config/prisma");
 class LeadRepository {
     static async create(data) {
         const { contactPoints, tags, ...leadData } = data;
+        // 1. Deduplicate contact points against DB
+        const newContactPoints = [];
+        for (const cp of contactPoints) {
+            const normalized = cp.value.trim().toLowerCase();
+            const existing = await prisma_1.prisma.contactPoint.findUnique({
+                where: {
+                    type_normalized: {
+                        type: cp.type,
+                        normalized,
+                    },
+                },
+            });
+            if (!existing) {
+                newContactPoints.push({
+                    type: cp.type,
+                    value: cp.value,
+                    normalized,
+                    isPublic: cp.isPublic,
+                    isVerified: cp.isVerified || false,
+                    verification: cp.verification || undefined,
+                });
+            }
+        }
+        // If all contact points already exist in DB, skip creating duplicate lead
+        if (newContactPoints.length === 0) {
+            throw new Error('DUPLICATE_CONTACT_POINTS');
+        }
         return prisma_1.prisma.lead.create({
             data: {
                 ...leadData,
                 contactPoints: {
-                    create: contactPoints.map((cp) => ({
-                        type: cp.type,
-                        value: cp.value,
-                        normalized: cp.value.trim().toLowerCase(),
-                        isPublic: cp.isPublic,
-                    })),
+                    create: newContactPoints,
                 },
                 tags: {
                     create: tags.map((t) => ({ tag: t })),
@@ -69,13 +91,20 @@ class LeadRepository {
                 },
             }),
         ]);
-        return { total, page, limit, totalPages: Math.ceil(total / limit), leads };
+        return {
+            data: leads,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
     static async updateStatus(id, status) {
         return prisma_1.prisma.lead.update({
             where: { id },
             data: { status },
-            include: { contactPoints: true, sources: true, tags: true },
         });
     }
 }

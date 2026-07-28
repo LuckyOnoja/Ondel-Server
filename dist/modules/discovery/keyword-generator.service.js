@@ -9,17 +9,26 @@ const env_1 = require("../../config/env");
 const keyword_repository_1 = require("./keyword.repository");
 class KeywordGeneratorService {
     static async generateAndStoreKeywords(options) {
-        const { categories, genres, countries } = options;
+        const { categories, genres, similarArtists, soundVibe, countries } = options;
         const countryStr = countries && countries.length > 0 ? countries.join(', ') : 'Global';
         let totalSaved = 0;
         for (const category of categories) {
             for (const genre of genres) {
-                const prompt = `You are a music industry SEO and search intent analyst. Generate 30 highly specific, diverse long-tail search queries used to discover:
+                let prompt = '';
+                if (similarArtists && similarArtists.length > 0) {
+                    const artistRefStr = similarArtists.join(', ');
+                    const vibeStr = soundVibe || genre;
+                    prompt = `You are an expert music industry SEO analyst. Generate 30 highly specific, diverse long-tail web search queries used to discover:
 - Category: "${category}"
 - Genre: "${genre}"
+- Sound Vibe / Style: "${vibeStr}"
+- Reference Artists: "${artistRefStr}"
 - Target Region: "${countryStr}"
 
-Include variations for independent playlisters, submission portals, radio DJs, music blogs, contact pages, and submission forms.
+Include specific variations for:
+1. Spotify playlist submission pages for curators featuring artists like ${artistRefStr}.
+2. Radio DJs, independent music blogs, and A&R contact forms accepting music in the style of ${artistRefStr}.
+3. Direct submission portals (Google Forms, SubmitHub, Groover, contact emails).
 
 Return a valid JSON object matching EXACTLY this structure:
 {
@@ -28,6 +37,23 @@ Return a valid JSON object matching EXACTLY this structure:
     "long tail search query 2"
   ]
 }`;
+                }
+                else {
+                    prompt = `You are an expert music industry SEO analyst. Generate 30 diverse, random, highly effective long-tail web search queries used to discover:
+- Category: "${category}"
+- Genre: "${genre}"
+- Target Region: "${countryStr}"
+
+Generate random variations across independent playlist curators, radio DJs, music blogs, music publications, submission forms, and contact pages. Do NOT hardcode specific artist names unless organically relevant.
+
+Return a valid JSON object matching EXACTLY this structure:
+{
+  "keywords": [
+    "long tail search query 1",
+    "long tail search query 2"
+  ]
+}`;
+                }
                 let keywords = [];
                 // 1. Try DeepSeek AI
                 if (env_1.env.DEEPSEEK_API_KEY) {
@@ -36,7 +62,7 @@ Return a valid JSON object matching EXACTLY this structure:
                             model: 'deepseek-chat',
                             messages: [{ role: 'user', content: prompt }],
                             response_format: { type: 'json_object' },
-                            temperature: 0.7,
+                            temperature: 0.8,
                         }, {
                             headers: {
                                 Authorization: `Bearer ${env_1.env.DEEPSEEK_API_KEY}`,
@@ -76,13 +102,13 @@ Return a valid JSON object matching EXACTLY this structure:
                         console.warn('[KeywordGenerator Gemini] Error:', err.message);
                     }
                 }
-                // 3. Fallback to deterministic query builder if AI fails
+                // 3. Fallback to general query builder if AI fails
                 if (keywords.length === 0) {
                     keywords = [
                         `${genre} ${category.toLowerCase().replace('_', ' ')} submit music ${countryStr}`,
                         `${genre} playlist submission ${countryStr}`,
                         `independent ${genre} curator contact ${countryStr}`,
-                        `${genre} radio station demo submission ${countryStr}`,
+                        `${genre} radio DJ demo submission ${countryStr}`,
                         `${genre} music blog review track ${countryStr}`,
                     ];
                 }

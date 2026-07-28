@@ -5,6 +5,8 @@ export const CreateContactPointSchema = z.object({
   type: z.nativeEnum(ContactPointType),
   value: z.string().min(1),
   isPublic: z.boolean().optional().default(true),
+  isVerified: z.boolean().optional(),
+  verification: z.any().optional(),
 });
 
 export const CreateLeadSchema = z.object({

@@ -244,16 +244,18 @@ model Artist {
 }
 
 model Song {
-  id        String   @id @default(cuid())
-  artistId  String
-  title     String
-  genre     String
-  subgenres String[]
-  audioUrl  String?
-  epkUrl    String?
-  metadata  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  artistId       String
+  title          String
+  genre          String
+  subgenres      String[]
+  similarArtists String[]
+  soundVibe      String?
+  audioUrl       String?
+  epkUrl         String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   artist    Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
   campaigns Campaign[]
@@ -297,6 +299,8 @@ model Campaign {
   targetCategories LeadCategory[]
   targetGenres     String[]
   targetCountries  String[]
+  similarArtists   String[]
+  soundVibe        String?
   status           CampaignStatus       @default(DRAFT)
   budgetCredits    Int
   consumedCredits  Int                  @default(0)

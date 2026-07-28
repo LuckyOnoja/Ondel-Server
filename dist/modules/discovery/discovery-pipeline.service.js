@@ -15,7 +15,7 @@ class DiscoveryPipelineService {
     static searchProvider = new free_search_provider_1.FreeSearchProvider();
     static aiProvider = new deepseek_gemini_provider_1.DeepSeekGeminiAIProvider();
     static async runPipeline(options) {
-        const { jobId, categories, genres, countries, targetCount } = options;
+        const { jobId, categories, genres, similarArtists, soundVibe, countries, targetCount } = options;
         job_tracker_1.JobTracker.updateProgress(jobId, { status: 'RUNNING' });
         try {
             // 1. Generate & Ledger AI Long-Tail Keywords if DB pending keywords are low
@@ -24,7 +24,7 @@ class DiscoveryPipelineService {
             let pendingKeywords = await keyword_repository_1.KeywordRepository.findPendingKeywords(primaryCategory, primaryGenre, 30);
             if (pendingKeywords.length < 5) {
                 console.log(`[DiscoveryPipeline] Pending keywords low for ${primaryCategory}/${primaryGenre}. Triggering AI Keyword Generator...`);
-                await keyword_generator_service_1.KeywordGeneratorService.generateAndStoreKeywords({ categories, genres, countries });
+                await keyword_generator_service_1.KeywordGeneratorService.generateAndStoreKeywords({ categories, genres, similarArtists, soundVibe, countries });
                 pendingKeywords = await keyword_repository_1.KeywordRepository.findPendingKeywords(primaryCategory, primaryGenre, 30);
             }
             console.log(`[DiscoveryPipeline] Job ${jobId}: Loaded ${pendingKeywords.length} pending search keywords from database ledger.`);

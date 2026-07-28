@@ -7,6 +7,8 @@ exports.CreateContactPointSchema = zod_1.z.object({
     type: zod_1.z.nativeEnum(client_1.ContactPointType),
     value: zod_1.z.string().min(1),
     isPublic: zod_1.z.boolean().optional().default(true),
+    isVerified: zod_1.z.boolean().optional(),
+    verification: zod_1.z.any().optional(),
 });
 exports.CreateLeadSchema = zod_1.z.object({
     name: zod_1.z.string().optional(),

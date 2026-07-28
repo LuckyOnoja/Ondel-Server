@@ -107,4 +107,11 @@ export class LeadRepository {
       },
     };
   }
+
+  static async updateStatus(id: string, status: any) {
+    return prisma.lead.update({
+      where: { id },
+      data: { status },
+    });
+  }
 }

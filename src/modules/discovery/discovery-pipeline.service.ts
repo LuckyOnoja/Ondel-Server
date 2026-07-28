@@ -13,6 +13,8 @@ export interface DiscoveryOptions {
   jobId: string;
   categories: LeadCategory[];
   genres: string[];
+  similarArtists?: string[];
+  soundVibe?: string;
   countries?: string[];
   targetCount: number;
 }
@@ -22,7 +24,7 @@ export class DiscoveryPipelineService {
   private static aiProvider = new DeepSeekGeminiAIProvider();
 
   static async runPipeline(options: DiscoveryOptions): Promise<void> {
-    const { jobId, categories, genres, countries, targetCount } = options;
+    const { jobId, categories, genres, similarArtists, soundVibe, countries, targetCount } = options;
     JobTracker.updateProgress(jobId, { status: 'RUNNING' });
 
     try {
@@ -34,7 +36,7 @@ export class DiscoveryPipelineService {
 
       if (pendingKeywords.length < 5) {
         console.log(`[DiscoveryPipeline] Pending keywords low for ${primaryCategory}/${primaryGenre}. Triggering AI Keyword Generator...`);
-        await KeywordGeneratorService.generateAndStoreKeywords({ categories, genres, countries });
+        await KeywordGeneratorService.generateAndStoreKeywords({ categories, genres, similarArtists, soundVibe, countries });
         pendingKeywords = await KeywordRepository.findPendingKeywords(primaryCategory, primaryGenre, 30);
       }
 
