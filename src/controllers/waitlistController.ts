@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { sendStrategyDeliveredEmail, sendWeeklyOpportunityEmail } from '../config/mailer.js';
@@ -118,6 +119,11 @@ export async function uploadDemo(req: Request, res: Response): Promise<void> {
         const cdnUrl = await uploadAudioToCloudinary(req.file.path, req.file.filename);
         finalFileUrl = cdnUrl;
         console.log('[Cloudinary Upload Success]:', cdnUrl);
+
+        // Delete temporary disk file immediately after Cloudinary upload
+        if (req.file.path && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
       } catch (cErr) {
         console.error('[Cloudinary Upload Fallback to local]:', cErr);
       }

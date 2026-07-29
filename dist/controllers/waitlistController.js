@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logStep = logStep;
 exports.submitWaitlist = submitWaitlist;
@@ -10,6 +13,7 @@ exports.saveAndDeliverStrategy = saveAndDeliverStrategy;
 exports.createWeeklyOpportunity = createWeeklyOpportunity;
 exports.getAnalyticsMetrics = getAnalyticsMetrics;
 exports.getMyStrategy = getMyStrategy;
+const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
 const cloudinary_js_1 = require("../config/cloudinary.js");
@@ -105,6 +109,10 @@ async function uploadDemo(req, res) {
                 const cdnUrl = await (0, cloudinary_js_1.uploadAudioToCloudinary)(req.file.path, req.file.filename);
                 finalFileUrl = cdnUrl;
                 console.log('[Cloudinary Upload Success]:', cdnUrl);
+                // Delete temporary disk file immediately after Cloudinary upload
+                if (req.file.path && fs_1.default.existsSync(req.file.path)) {
+                    fs_1.default.unlinkSync(req.file.path);
+                }
             }
             catch (cErr) {
                 console.error('[Cloudinary Upload Fallback to local]:', cErr);
