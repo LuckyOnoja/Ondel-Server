@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendOtpEmail = sendOtpEmail;
+exports.sendStrategyDeliveredEmail = sendStrategyDeliveredEmail;
+exports.sendWeeklyOpportunityEmail = sendWeeklyOpportunityEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const env_js_1 = require("./env.js");
 const transporter = nodemailer_1.default.createTransport({
@@ -47,6 +49,97 @@ async function sendOtpEmail(toEmail, otp) {
         console.error(`❌ [Mailer Error] Failed to send email to ${toEmail}:`, error);
         // Fallback log in dev
         console.log(`🔑 Fallback OTP for ${toEmail}: ${otp}`);
+        return false;
+    }
+}
+async function sendStrategyDeliveredEmail(toEmail, artistName, shareToken) {
+    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
+    if (!isConfigured) {
+        console.log(`
+  =============================================================
+  📬 [DEVELOPMENT MAIL] Strategy Delivered to ${artistName} (${toEmail}):
+  Link: ${strategyUrl}
+  =============================================================
+    `);
+        return true;
+    }
+    try {
+        await transporter.sendMail({
+            from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
+            to: toEmail,
+            subject: `Your Ondel Personalised Release Strategy is Ready 🚀`,
+            html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px; background: #09090b; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
+          <div style="margin-bottom: 20px;">
+            <span style="font-size: 12px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 1px;">Ondie AI Release Manager</span>
+          </div>
+          <h2 style="font-size: 26px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Your Personalised Strategy for ${artistName}</h2>
+          <p style="color: #a1a1aa; font-size: 15px; leading-height: 1.6; margin-bottom: 24px;">
+            We have reviewed your release details and built your custom 5-pillar launch plan (Release Roadmap, 30-Day Content Calendar, Playlist Pitching Targets, Creator Opportunities, and Checklist).
+          </p>
+          <div style="text-align: center; margin-bottom: 28px;">
+            <a href="${strategyUrl}" style="display: inline-block; background: linear-gradient(to right, #f59e0b, #d97706); color: #09090b; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+              View Your Personalised Strategy →
+            </a>
+          </div>
+          <p style="color: #71717a; font-size: 13px; line-height: 1.5;">
+            We will continue to analyze your release performance and send you new opportunities week after week.
+          </p>
+        </div>
+      `,
+        });
+        console.log(`✅ [Mailer] Sent Strategy Delivered email successfully to ${toEmail}`);
+        return true;
+    }
+    catch (error) {
+        console.error(`❌ [Mailer Error] Failed to send strategy email to ${toEmail}:`, error);
+        return false;
+    }
+}
+async function sendWeeklyOpportunityEmail(toEmail, artistName, updateTitle, shareToken) {
+    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
+    if (!isConfigured) {
+        console.log(`
+  =============================================================
+  📬 [DEVELOPMENT MAIL] Weekly Opportunity Alert for ${artistName} (${toEmail}):
+  Title: ${updateTitle}
+  Link: ${strategyUrl}
+  =============================================================
+    `);
+        return true;
+    }
+    try {
+        await transporter.sendMail({
+            from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
+            to: toEmail,
+            subject: `Ondie Update: ${updateTitle}`,
+            html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px; background: #09090b; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
+          <div style="margin-bottom: 20px;">
+            <span style="font-size: 12px; font-weight: 700; color: #a855f7; text-transform: uppercase; letter-spacing: 1px;">Weekly Opportunity Update</span>
+          </div>
+          <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Ondie found new opportunities for your release</h2>
+          <p style="color: #e4e4e7; font-size: 15px; font-weight: 600; margin-bottom: 16px;">
+            ${updateTitle}
+          </p>
+          <p style="color: #a1a1aa; font-size: 14px; margin-bottom: 24px;">
+            New playlist pitching targets and viral content concepts have been added directly to your release workspace.
+          </p>
+          <div style="text-align: center; margin-bottom: 24px;">
+            <a href="${strategyUrl}" style="display: inline-block; background: #a855f7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 24px; border-radius: 10px; text-decoration: none;">
+              Open Release Workspace →
+            </a>
+          </div>
+        </div>
+      `,
+        });
+        console.log(`✅ [Mailer] Sent Weekly Opportunity email to ${toEmail}`);
+        return true;
+    }
+    catch (error) {
+        console.error(`❌ [Mailer Error] Failed to send weekly opportunity email to ${toEmail}:`, error);
         return false;
     }
 }

@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireAuth = requireAuth;
+exports.requireAdmin = requireAdmin;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const env_js_1 = require("../config/env.js");
 function requireAuth(req, res, next) {
@@ -21,4 +22,13 @@ function requireAuth(req, res, next) {
     catch (error) {
         res.status(401).json({ success: false, message: 'Unauthorized: Invalid or expired token' });
     }
+}
+function requireAdmin(req, res, next) {
+    requireAuth(req, res, () => {
+        if (!req.user?.isAdmin) {
+            res.status(403).json({ success: false, message: 'Forbidden: Admin access required' });
+            return;
+        }
+        next();
+    });
 }

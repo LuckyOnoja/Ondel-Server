@@ -16,9 +16,9 @@ function generateOtp(): string {
 }
 
 // Generate JWT token
-function generateToken(userId: string, email: string, authProvider: string): string {
+function generateToken(userId: string, email: string, authProvider: string, isAdmin: boolean = false): string {
   return jwt.sign(
-    { userId, email, authProvider },
+    { userId, email, authProvider, isAdmin },
     env.JWT_SECRET,
     { expiresIn: env.JWT_EXPIRES_IN as any }
   );
@@ -133,7 +133,7 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
     }
 
     // Issue JWT Token
-    const token = generateToken(user.id, user.email, user.authProvider);
+    const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
 
     res.status(200).json({
       success: true,
@@ -146,6 +146,7 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
         avatarUrl: user.avatarUrl,
         authProvider: user.authProvider,
         isVerified: user.isVerified,
+        isAdmin: user.isAdmin,
       },
     });
   } catch (error: any) {
@@ -235,7 +236,7 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
     }
 
     // Issue JWT Token
-    const token = generateToken(user.id, user.email, user.authProvider);
+    const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
 
     res.status(200).json({
       success: true,
@@ -248,6 +249,7 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
         avatarUrl: user.avatarUrl,
         authProvider: user.authProvider,
         isVerified: user.isVerified,
+        isAdmin: user.isAdmin,
       },
     });
   } catch (error: any) {
@@ -275,6 +277,7 @@ export async function getCurrentUser(req: AuthRequest, res: Response): Promise<v
         avatarUrl: true,
         authProvider: true,
         isVerified: true,
+        isAdmin: true,
         createdAt: true,
       },
     });

@@ -1,7 +1,9 @@
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import waitlistRoutes from './routes/waitlistRoutes.js';
 import leadRoutes from './modules/leads/lead.routes.js';
 import discoveryRoutes from './modules/discovery/discovery.routes.js';
 import creditRoutes from './modules/credits/credit.routes.js';
@@ -17,8 +19,11 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve static uploads (audio demos)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -32,6 +37,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/waitlist', waitlistRoutes);
 app.use('/api/v1/leads', leadRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/v1/discovery', discoveryRoutes);

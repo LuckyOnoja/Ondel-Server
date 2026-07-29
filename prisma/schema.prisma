@@ -101,6 +101,7 @@ model User {
   avatarUrl    String?
   authProvider AuthProvider  @default(EMAIL)
   isVerified   Boolean       @default(false)
+  isAdmin      Boolean       @default(false)
   googleId     String?       @unique
   appleId      String?       @unique
   spotifyId    String?       @unique
@@ -348,3 +349,108 @@ model DiscoveryKeyword {
   @@index([status])
   @@map("discovery_keywords")
 }
+
+enum WaitlistUrgency {
+  WITHIN_2_WEEKS
+  THIS_MONTH
+  NEXT_3_MONTHS
+  JUST_EXPLORING
+}
+
+enum WaitlistChallenge {
+  DONT_KNOW_WHAT_TO_DO
+  FINDING_PLAYLISTS
+  CREATING_CONTENT
+  WHEN_TO_RELEASE
+  GROWING_LISTENERS
+  EVERYTHING
+}
+
+enum WaitlistStatus {
+  SUBMITTED
+  REVIEWING
+  STRATEGY_GENERATED
+  STRATEGY_DELIVERED
+  ACCEPTED
+  WEEKLY_ACTIVE
+  ARCHIVED
+}
+
+model WaitlistSubmission {
+  id               String             @id @default(cuid())
+  artistName       String
+  email            String
+  urgency          WaitlistUrgency
+  biggestChallenge WaitlistChallenge
+  goldmineAnswer   String             // Step 4 open text: "If Ondel could manage ONE thing..."
+  demoUrl          String?            // Audio demo link
+  audioFileName    String?
+  spotifyLink      String?
+  appleMusicLink   String?
+  strategyRequested Boolean           @default(true)
+  headlineVariant  String             // "A", "B", "C", "D"
+  status           WaitlistStatus     @default(SUBMITTED)
+  adminNotes       String?
+  shareToken       String             @unique @default(cuid())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  stepLogs        WaitlistStepLog[]
+  strategy        ReleaseStrategy?
+  weeklyUpdates   WeeklyOpportunity[]
+
+  @@map("waitlist_submissions")
+}
+
+model WaitlistStepLog {
+  id           String             @id @default(cuid())
+  sessionId    String
+  variant      String
+  stepNumber   Int
+  stepName     String
+  completed    Boolean            @default(true)
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+
+  submissionId String?
+  submission   WaitlistSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, stepNumber])
+  @@map("waitlist_step_logs")
+}
+
+model ReleaseStrategy {
+  id               String             @id @default(cuid())
+  submissionId     String             @unique
+  submission       WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  
+  roadmap          Json               // [{ week: 1, title: "", tasks: [""] }]
+  contentCalendar  Json               // [{ day: 1, concept: "", hook: "", format: "" }]
+  playlistTargets  Json               // [{ name: "", genre: "", pitchNote: "" }]
+  creatorCollabs   Json               // [{ handle: "", platform: "", idea: "" }]
+  weeklyChecklist  Json               // [{ title: "", done: false }]
+  
+  deliveredAt      DateTime?
+  artistReplied    Boolean            @default(false)
+  artistFeedback   String?
+  wouldPaySignal   Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@map("release_strategies")
+}
+
+model WeeklyOpportunity {
+  id           String             @id @default(cuid())
+  submissionId String
+  submission   WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  
+  weekNumber   Int
+  title        String
+  opportunities Json              // [{ category: "PLAYLIST", title: "", description: "", link: "" }]
+  sentAt       DateTime           @default(now())
+  clickedAt    DateTime?
+
+  @@map("weekly_opportunities")
+}
+

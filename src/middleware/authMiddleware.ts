@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   userId: string;
   email: string;
   authProvider: string;
+  isAdmin?: boolean;
 }
 
 export interface AuthRequest extends Request {
@@ -28,4 +29,14 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   } catch (error) {
     res.status(401).json({ success: false, message: 'Unauthorized: Invalid or expired token' });
   }
+}
+
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (!req.user?.isAdmin) {
+      res.status(403).json({ success: false, message: 'Forbidden: Admin access required' });
+      return;
+    }
+    next();
+  });
 }

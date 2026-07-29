@@ -20,8 +20,8 @@ function generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 // Generate JWT token
-function generateToken(userId, email, authProvider) {
-    return jsonwebtoken_1.default.sign({ userId, email, authProvider }, env_js_1.env.JWT_SECRET, { expiresIn: env_js_1.env.JWT_EXPIRES_IN });
+function generateToken(userId, email, authProvider, isAdmin = false) {
+    return jsonwebtoken_1.default.sign({ userId, email, authProvider, isAdmin }, env_js_1.env.JWT_SECRET, { expiresIn: env_js_1.env.JWT_EXPIRES_IN });
 }
 /**
  * Step 1: Request OTP
@@ -117,7 +117,7 @@ async function verifyOtp(req, res) {
             });
         }
         // Issue JWT Token
-        const token = generateToken(user.id, user.email, user.authProvider);
+        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
         res.status(200).json({
             success: true,
             message: 'Authentication successful',
@@ -129,6 +129,7 @@ async function verifyOtp(req, res) {
                 avatarUrl: user.avatarUrl,
                 authProvider: user.authProvider,
                 isVerified: user.isVerified,
+                isAdmin: user.isAdmin,
             },
         });
     }
@@ -214,7 +215,7 @@ async function googleAuth(req, res) {
             });
         }
         // Issue JWT Token
-        const token = generateToken(user.id, user.email, user.authProvider);
+        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
         res.status(200).json({
             success: true,
             message: 'Google Authentication successful',
@@ -226,6 +227,7 @@ async function googleAuth(req, res) {
                 avatarUrl: user.avatarUrl,
                 authProvider: user.authProvider,
                 isVerified: user.isVerified,
+                isAdmin: user.isAdmin,
             },
         });
     }
@@ -252,6 +254,7 @@ async function getCurrentUser(req, res) {
                 avatarUrl: true,
                 authProvider: true,
                 isVerified: true,
+                isAdmin: true,
                 createdAt: true,
             },
         });
