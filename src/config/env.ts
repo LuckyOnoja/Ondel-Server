@@ -26,5 +26,6 @@ export const env = {
   IMAP_PORT: Number(process.env.IMAP_PORT || 993),
   IMAP_USER: process.env.IMAP_USER || process.env.EMAIL_USER || '',
   IMAP_PASS: process.env.IMAP_PASS || process.env.EMAIL_PASSWORD || '',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   IMAP_POLL_INTERVAL_MINUTES: Number(process.env.IMAP_POLL_INTERVAL_MINUTES || 5),
 };

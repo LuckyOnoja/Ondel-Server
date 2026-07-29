@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
+import axios from 'axios';
 import { prisma } from '../config/prisma.js';
 import { redisCache } from '../config/redis.js';
 import { sendOtpEmail } from '../config/mailer.js';
@@ -166,11 +167,12 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
     let userAvatar = avatarUrl;
     let gId = googleId;
 
-    // Optional: Verify Google ID token if credential is provided
+    // Verify Google ID token or Access Token if credential is provided
     if (credential) {
       try {
         const ticket = await googleClient.verifyIdToken({
           idToken: credential,
+          audience: env.GOOGLE_CLIENT_ID || undefined,
         });
         const payload = ticket.getPayload();
         if (payload) {
@@ -180,7 +182,20 @@ export async function googleAuth(req: Request, res: Response): Promise<void> {
           gId = payload.sub;
         }
       } catch (tokenErr) {
-        console.warn('⚠️ [Google Token Verify Warning]:', tokenErr);
+        // Fallback: Check if credential is an access token
+        try {
+          const userInfoRes = await axios.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${credential}` },
+          });
+          if (userInfoRes.data?.email) {
+            userEmail = userInfoRes.data.email;
+            userName = userInfoRes.data.name;
+            userAvatar = userInfoRes.data.picture;
+            gId = userInfoRes.data.sub;
+          }
+        } catch (accessErr) {
+          console.warn('⚠️ [Google Token Verification Failed]:', tokenErr);
+        }
       }
     }
 

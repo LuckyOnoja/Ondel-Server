@@ -9,6 +9,7 @@ exports.googleAuth = googleAuth;
 exports.getCurrentUser = getCurrentUser;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const google_auth_library_1 = require("google-auth-library");
+const axios_1 = __importDefault(require("axios"));
 const prisma_js_1 = require("../config/prisma.js");
 const redis_js_1 = require("../config/redis.js");
 const mailer_js_1 = require("../config/mailer.js");
@@ -147,11 +148,12 @@ async function googleAuth(req, res) {
         let userName = name;
         let userAvatar = avatarUrl;
         let gId = googleId;
-        // Optional: Verify Google ID token if credential is provided
+        // Verify Google ID token or Access Token if credential is provided
         if (credential) {
             try {
                 const ticket = await googleClient.verifyIdToken({
                     idToken: credential,
+                    audience: env_js_1.env.GOOGLE_CLIENT_ID || undefined,
                 });
                 const payload = ticket.getPayload();
                 if (payload) {
@@ -162,7 +164,21 @@ async function googleAuth(req, res) {
                 }
             }
             catch (tokenErr) {
-                console.warn('⚠️ [Google Token Verify Warning]:', tokenErr);
+                // Fallback: Check if credential is an access token
+                try {
+                    const userInfoRes = await axios_1.default.get('https://www.googleapis.com/oauth2/v3/userinfo', {
+                        headers: { Authorization: `Bearer ${credential}` },
+                    });
+                    if (userInfoRes.data?.email) {
+                        userEmail = userInfoRes.data.email;
+                        userName = userInfoRes.data.name;
+                        userAvatar = userInfoRes.data.picture;
+                        gId = userInfoRes.data.sub;
+                    }
+                }
+                catch (accessErr) {
+                    console.warn('⚠️ [Google Token Verification Failed]:', tokenErr);
+                }
             }
         }
         if (!userEmail) {
