@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "test:discovery": "tsx src/scripts/run-discovery-test.ts"
+    "test:discovery": "tsx src/scripts/run-discovery-test.ts",
+    "test:form": "tsx src/scripts/run-form-test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

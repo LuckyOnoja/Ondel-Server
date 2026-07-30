@@ -7,6 +7,335 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String            @id @default(uuid())
+  email         String            @unique
+  name          String?
+  avatarUrl     String?
+  authProvider  AuthProvider      @default(EMAIL)
+  isVerified    Boolean           @default(false)
+  googleId      String?           @unique
+  appleId       String?           @unique
+  spotifyId     String?           @unique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  isAdmin       Boolean           @default(false)
+  artists       Artist[]
+  campaigns     Campaign[]
+  creditAccount CreditAccount?
+  workspaces    WorkspaceMember[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String            @id @default(uuid())
+  name      String
+  slug      String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  releases  Release[]
+  members   WorkspaceMember[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  userId      String
+  workspaceId String
+  role        Role      @default(OWNER)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@map("workspace_members")
+}
+
+model Release {
+  id          String    @id @default(uuid())
+  workspaceId String
+  title       String
+  artist      String
+  genre       String?
+  releaseDate DateTime?
+  status      String    @default("DRAFT")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("releases")
+}
+
+model WaitlistSubmission {
+  id                   String                 @id @default(uuid())
+  artistName           String
+  email                String
+  urgency              WaitlistUrgency
+  biggestChallenge     WaitlistChallenge
+  goldmineAnswer       String
+  demoUrl              String?
+  audioFileName        String?
+  spotifyLink          String?
+  appleMusicLink       String?
+  strategyRequested    Boolean                @default(true)
+  headlineVariant      String
+  status               WaitlistStatus         @default(SUBMITTED)
+  adminNotes           String?
+  shareToken           String                 @unique @default(uuid())
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  release_strategies   ReleaseStrategy?
+  waitlistStepLogs     WaitlistStepLog[]
+  weeklyOpportunities  WeeklyOpportunity[]
+
+  @@map("waitlist_submissions")
+}
+
+model ReleaseStrategy {
+  id                   String             @id @default(uuid())
+  submissionId         String             @unique
+  roadmap              Json
+  contentCalendar      Json
+  playlistTargets      Json
+  creatorCollabs       Json
+  weeklyChecklist      Json
+  deliveredAt          DateTime?
+  artistReplied        Boolean            @default(false)
+  artistFeedback       String?
+  wouldPaySignal       Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  waitlist_submissions WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("release_strategies")
+}
+
+model Lead {
+  id                 String           @id @default(cuid())
+  name               String?
+  organization       String?
+  category           LeadCategory
+  country            String?
+  city               String?
+  genres             String[]
+  acceptsSubmissions Boolean          @default(false)
+  status             LeadStatus       @default(DISCOVERED)
+  relevanceScore     Float?
+  sourceUrl          String?
+  sourceType         String?
+  metadata           Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  campaignTargets    CampaignTarget[]
+  contactPoints      ContactPoint[]
+  sources            LeadSource[]
+  tags               LeadTag[]
+
+  @@index([category])
+  @@index([country])
+  @@index([status])
+  @@map("leads")
+}
+
+model ContactPoint {
+  id             String           @id @default(cuid())
+  leadId         String
+  type           ContactPointType
+  value          String
+  normalized     String
+  isPublic       Boolean          @default(true)
+  isVerified     Boolean          @default(false)
+  verification   Json?
+  lastVerifiedAt DateTime?
+  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([type, normalized])
+  @@map("contact_points")
+}
+
+model LeadSource {
+  id           String   @id @default(cuid())
+  leadId       String
+  url          String
+  sourceType   String
+  discoveredAt DateTime @default(now())
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, url])
+  @@map("lead_sources")
+}
+
+model LeadTag {
+  id     String @id @default(cuid())
+  leadId String
+  tag    String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, tag])
+  @@map("lead_tags")
+}
+
+model Artist {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  bio       String?
+  genres    String[]
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  songs     Song[]
+
+  @@map("artists")
+}
+
+model Song {
+  id             String     @id @default(cuid())
+  artistId       String
+  title          String
+  genre          String
+  subgenres      String[]
+  audioUrl       String?
+  epkUrl         String?
+  metadata       Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  similarArtists String[]
+  soundVibe      String?
+  campaigns      Campaign[]
+  artist         Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@map("songs")
+}
+
+model CreditAccount {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  balance      Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("credit_accounts")
+}
+
+model CreditTransaction {
+  id            String                @id @default(cuid())
+  accountId     String
+  type          CreditTransactionType
+  amount        Int
+  referenceType String?
+  referenceId   String?
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+  account       CreditAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model Campaign {
+  id               String           @id @default(cuid())
+  userId           String
+  songId           String
+  goal             String
+  targetCategories LeadCategory[]
+  targetGenres     String[]
+  targetCountries  String[]
+  status           CampaignStatus   @default(DRAFT)
+  budgetCredits    Int
+  consumedCredits  Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  similarArtists   String[]
+  soundVibe        String?
+  targets          CampaignTarget[]
+  song             Song             @relation(fields: [songId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("campaigns")
+}
+
+model CampaignTarget {
+  id              String               @id @default(cuid())
+  campaignId      String
+  leadId          String
+  status          CampaignTargetStatus @default(RESERVED)
+  creditsReserved Int                  @default(1)
+  creditsConsumed Int                  @default(0)
+  sentAt          DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  campaign        Campaign             @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead            Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, leadId])
+  @@map("campaign_targets")
+}
+
+model DiscoveryKeyword {
+  id         String        @id @default(cuid())
+  keyword    String        @unique
+  category   LeadCategory
+  genre      String
+  country    String?
+  status     KeywordStatus @default(PENDING)
+  leadsFound Int           @default(0)
+  lastUsedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([category, genre])
+  @@index([status])
+  @@map("discovery_keywords")
+}
+
+model WaitlistStepLog {
+  id                   String              @id @default(uuid())
+  sessionId            String
+  variant              String
+  stepNumber           Int
+  stepName             String
+  completed            Boolean             @default(true)
+  metadata             Json?
+  createdAt            DateTime            @default(now())
+  submissionId         String?
+  waitlist_submissions WaitlistSubmission? @relation(fields: [submissionId], references: [id])
+
+  @@index([sessionId, stepNumber])
+  @@map("waitlist_step_logs")
+}
+
+model WeeklyOpportunity {
+  id                   String             @id @default(uuid())
+  submissionId         String
+  weekNumber           Int
+  title                String
+  opportunities        Json
+  sentAt               DateTime           @default(now())
+  clickedAt            DateTime?
+  waitlist_submissions WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("weekly_opportunities")
+}
+
+model TestSubmission {
+  id           String   @id @default(cuid())
+  artistName   String
+  songTitle    String
+  spotifyUrl   String?
+  email        String
+  pitchMessage String?
+  epkUrl       String?
+  sourceUrl    String?
+  createdAt    DateTime @default(now())
+
+  @@map("test_submissions")
+}
+
 enum AuthProvider {
   EMAIL
   GOOGLE
@@ -94,269 +423,6 @@ enum KeywordStatus {
   FAILED
 }
 
-model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  name         String?
-  avatarUrl    String?
-  authProvider AuthProvider  @default(EMAIL)
-  isVerified   Boolean       @default(false)
-  isAdmin      Boolean       @default(false)
-  googleId     String?       @unique
-  appleId      String?       @unique
-  spotifyId    String?       @unique
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  workspaces    WorkspaceMember[]
-  artists       Artist[]
-  creditAccount CreditAccount?
-  campaigns     Campaign[]
-
-  @@map("users")
-}
-
-model Workspace {
-  id          String            @id @default(uuid())
-  name        String
-  slug        String            @unique
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  members     WorkspaceMember[]
-  releases    Release[]
-
-  @@map("workspaces")
-}
-
-model WorkspaceMember {
-  id          String    @id @default(uuid())
-  userId      String
-  workspaceId String
-  role        Role      @default(OWNER)
-  createdAt   DateTime  @default(now())
-
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, workspaceId])
-  @@map("workspace_members")
-}
-
-model Release {
-  id          String    @id @default(uuid())
-  workspaceId String
-  title       String
-  artist      String
-  genre       String?
-  releaseDate DateTime?
-  status      String    @default("DRAFT")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-
-  @@map("releases")
-}
-
-model Lead {
-  id                 String           @id @default(cuid())
-  name               String?
-  organization       String?
-  category           LeadCategory
-  country            String?
-  city               String?
-  genres             String[]
-  acceptsSubmissions Boolean          @default(false)
-  status             LeadStatus       @default(DISCOVERED)
-  relevanceScore     Float?
-  sourceUrl          String?
-  sourceType         String?
-  metadata           Json?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
-
-  contactPoints      ContactPoint[]
-  sources            LeadSource[]
-  tags               LeadTag[]
-  campaignTargets    CampaignTarget[]
-
-  @@index([category])
-  @@index([country])
-  @@index([status])
-  @@map("leads")
-}
-
-model ContactPoint {
-  id             String           @id @default(cuid())
-  leadId         String
-  type           ContactPointType
-  value          String
-  normalized     String
-  isPublic       Boolean          @default(true)
-  isVerified     Boolean          @default(false)
-  verification   Json?
-  lastVerifiedAt DateTime?
-
-  lead           Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@unique([type, normalized])
-  @@map("contact_points")
-}
-
-model LeadSource {
-  id           String   @id @default(cuid())
-  leadId       String
-  url          String
-  sourceType   String
-  discoveredAt DateTime @default(now())
-
-  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@unique([leadId, url])
-  @@map("lead_sources")
-}
-
-model LeadTag {
-  id     String @id @default(cuid())
-  leadId String
-  tag    String
-
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@unique([leadId, tag])
-  @@map("lead_tags")
-}
-
-model Artist {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  bio       String?
-  genres    String[]
-  country   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  songs     Song[]
-
-  @@map("artists")
-}
-
-model Song {
-  id             String   @id @default(cuid())
-  artistId       String
-  title          String
-  genre          String
-  subgenres      String[]
-  similarArtists String[]
-  soundVibe      String?
-  audioUrl       String?
-  epkUrl         String?
-  metadata       Json?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  artist    Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
-  campaigns Campaign[]
-
-  @@map("songs")
-}
-
-model CreditAccount {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  balance   Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions CreditTransaction[]
-
-  @@map("credit_accounts")
-}
-
-model CreditTransaction {
-  id            String                @id @default(cuid())
-  accountId     String
-  type          CreditTransactionType
-  amount        Int
-  referenceType String?
-  referenceId   String?
-  metadata      Json?
-  createdAt     DateTime              @default(now())
-
-  account CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-
-  @@map("credit_transactions")
-}
-
-model Campaign {
-  id               String               @id @default(cuid())
-  userId           String
-  songId           String
-  goal             String
-  targetCategories LeadCategory[]
-  targetGenres     String[]
-  targetCountries  String[]
-  similarArtists   String[]
-  soundVibe        String?
-  status           CampaignStatus       @default(DRAFT)
-  budgetCredits    Int
-  consumedCredits  Int                  @default(0)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-
-  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  song    Song             @relation(fields: [songId], references: [id], onDelete: Cascade)
-  targets CampaignTarget[]
-
-  @@map("campaigns")
-}
-
-model CampaignTarget {
-  id              String               @id @default(cuid())
-  campaignId      String
-  leadId          String
-  status          CampaignTargetStatus @default(RESERVED)
-  creditsReserved Int                  @default(1)
-  creditsConsumed Int                  @default(0)
-  sentAt          DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-
-  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-
-  @@unique([campaignId, leadId])
-  @@map("campaign_targets")
-}
-
-model DiscoveryKeyword {
-  id          String        @id @default(cuid())
-  keyword     String        @unique
-  category    LeadCategory
-  genre       String
-  country     String?
-  status      KeywordStatus @default(PENDING)
-  leadsFound  Int           @default(0)
-  lastUsedAt  DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  @@index([category, genre])
-  @@index([status])
-  @@map("discovery_keywords")
-}
-
-enum WaitlistUrgency {
-  WITHIN_2_WEEKS
-  THIS_MONTH
-  NEXT_3_MONTHS
-  JUST_EXPLORING
-}
-
 enum WaitlistChallenge {
   DONT_KNOW_WHAT_TO_DO
   FINDING_PLAYLISTS
@@ -376,81 +442,9 @@ enum WaitlistStatus {
   ARCHIVED
 }
 
-model WaitlistSubmission {
-  id               String             @id @default(cuid())
-  artistName       String
-  email            String
-  urgency          WaitlistUrgency
-  biggestChallenge WaitlistChallenge
-  goldmineAnswer   String             // Step 4 open text: "If Ondel could manage ONE thing..."
-  demoUrl          String?            // Audio demo link
-  audioFileName    String?
-  spotifyLink      String?
-  appleMusicLink   String?
-  strategyRequested Boolean           @default(true)
-  headlineVariant  String             // "A", "B", "C", "D"
-  status           WaitlistStatus     @default(SUBMITTED)
-  adminNotes       String?
-  shareToken       String             @unique @default(cuid())
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-
-  stepLogs        WaitlistStepLog[]
-  strategy        ReleaseStrategy?
-  weeklyUpdates   WeeklyOpportunity[]
-
-  @@map("waitlist_submissions")
+enum WaitlistUrgency {
+  WITHIN_2_WEEKS
+  THIS_MONTH
+  NEXT_3_MONTHS
+  JUST_EXPLORING
 }
-
-model WaitlistStepLog {
-  id           String             @id @default(cuid())
-  sessionId    String
-  variant      String
-  stepNumber   Int
-  stepName     String
-  completed    Boolean            @default(true)
-  metadata     Json?
-  createdAt    DateTime           @default(now())
-
-  submissionId String?
-  submission   WaitlistSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
-
-  @@index([sessionId, stepNumber])
-  @@map("waitlist_step_logs")
-}
-
-model ReleaseStrategy {
-  id               String             @id @default(cuid())
-  submissionId     String             @unique
-  submission       WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  
-  roadmap          Json               // [{ week: 1, title: "", tasks: [""] }]
-  contentCalendar  Json               // [{ day: 1, concept: "", hook: "", format: "" }]
-  playlistTargets  Json               // [{ name: "", genre: "", pitchNote: "" }]
-  creatorCollabs   Json               // [{ handle: "", platform: "", idea: "" }]
-  weeklyChecklist  Json               // [{ title: "", done: false }]
-  
-  deliveredAt      DateTime?
-  artistReplied    Boolean            @default(false)
-  artistFeedback   String?
-  wouldPaySignal   Boolean            @default(false)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-
-  @@map("release_strategies")
-}
-
-model WeeklyOpportunity {
-  id           String             @id @default(cuid())
-  submissionId String
-  submission   WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  
-  weekNumber   Int
-  title        String
-  opportunities Json              // [{ category: "PLAYLIST", title: "", description: "", link: "" }]
-  sentAt       DateTime           @default(now())
-  clickedAt    DateTime?
-
-  @@map("weekly_opportunities")
-}
-

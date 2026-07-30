@@ -10,6 +10,7 @@ import creditRoutes from './modules/credits/credit.routes.js';
 import matchingRoutes from './modules/matching/matching.routes.js';
 import campaignRoutes from './modules/campaigns/campaign.routes.js';
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
+import testSubmissionRoutes from './modules/testing/test-submission.routes.js';
 
 export const app = express();
 
@@ -46,6 +47,7 @@ app.use('/api/v1/matching', matchingRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/v1/test-submissions', testSubmissionRoutes);
 
 // 404 Handler
 app.use((req, res) => {
