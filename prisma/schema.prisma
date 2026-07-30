@@ -322,20 +322,6 @@ model WeeklyOpportunity {
   @@map("weekly_opportunities")
 }
 
-model TestSubmission {
-  id           String   @id @default(cuid())
-  artistName   String
-  songTitle    String
-  spotifyUrl   String?
-  email        String
-  pitchMessage String?
-  epkUrl       String?
-  sourceUrl    String?
-  createdAt    DateTime @default(now())
-
-  @@map("test_submissions")
-}
-
 enum AuthProvider {
   EMAIL
   GOOGLE

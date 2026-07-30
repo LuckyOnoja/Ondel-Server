@@ -9,9 +9,7 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio",
-    "test:discovery": "tsx src/scripts/run-discovery-test.ts",
-    "test:form": "tsx src/scripts/run-form-test.ts"
+    "prisma:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
@@ -33,6 +31,7 @@
     "multer": "^2.2.0",
     "nodemailer": "^6.9.16",
     "playwright": "^1.62.1",
+    "puppeteer": "^25.4.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

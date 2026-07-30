@@ -1,150 +1,106 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FormAutomationService = void 0;
-const axios_1 = __importDefault(require("axios"));
-const cheerio = __importStar(require("cheerio"));
-const deepseek_gemini_provider_1 = require("../../providers/ai/deepseek-gemini.provider");
+const puppeteer_1 = __importDefault(require("puppeteer"));
+const fs_1 = __importDefault(require("fs"));
 const cloudinary_service_1 = require("../../services/cloudinary.service");
 class FormAutomationService {
-    static aiProvider = new deepseek_gemini_provider_1.DeepSeekGeminiAIProvider();
     static async submitForm(formUrl, payload) {
+        let browser;
         try {
-            // 1. Fetch form HTML page
-            const pageRes = await axios_1.default.get(formUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                },
-                timeout: 10000,
+            console.log(`[FormAutomation] Launching Headless Browser to visit ${formUrl}...`);
+            // Detect system Chrome binary on macOS if available
+            let executablePath = undefined;
+            if (fs_1.default.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')) {
+                executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+                console.log('[FormAutomation] Using system Google Chrome binary.');
+            }
+            browser = await puppeteer_1.default.launch({
+                headless: true,
+                executablePath,
+                args: ['--no-sandbox', '--disable-setuid-sandbox'],
             });
-            const $ = cheerio.load(pageRes.data);
-            const formEl = $('form').first();
-            if (!formEl || formEl.length === 0) {
-                console.warn(`[FormAutomation] No HTML <form> element found on ${formUrl}. Logged as manual form link.`);
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1280, height: 800 });
+            // Navigate to the form page and wait for DOM content
+            await page.goto(formUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+            // Wait for form or input elements to be rendered by React/Vue/HTML
+            try {
+                await page.waitForSelector('form, input', { timeout: 8000 });
+            }
+            catch (waitErr) {
+                console.warn(`[FormAutomation] Selector wait timeout on ${formUrl}. Proceeding with page content.`);
+            }
+            // Check if inputs exist on page
+            const inputs = await page.$$('input, textarea');
+            if (inputs.length === 0) {
+                console.warn(`[FormAutomation] No inputs found on ${formUrl}. Logged as link.`);
+                await browser.close();
                 return {
                     success: true,
-                    message: 'Direct submission page link recorded.',
+                    message: 'Direct submission page recorded.',
                 };
             }
-            const formAction = formEl.attr('action') || formUrl;
-            const targetActionUrl = new URL(formAction, formUrl).toString();
-            const formMethod = (formEl.attr('method') || 'POST').toUpperCase();
-            // 2. Extract inputs
-            const formFields = [];
-            const postData = {};
-            formEl.find('input, textarea, select').each((_, el) => {
-                const name = $(el).attr('name');
-                const type = $(el).attr('type') || 'text';
-                const placeholder = $(el).attr('placeholder') || '';
-                const value = $(el).attr('value') || '';
-                if (name) {
-                    formFields.push({ name, type, placeholder });
-                    if (value)
-                        postData[name] = value;
+            console.log(`[FormAutomation] Found ${inputs.length} input fields on page. Auto-filling fields...`);
+            // Auto-fill form fields by analyzing name, placeholder, or type attributes
+            for (const input of inputs) {
+                const name = (await page.evaluate((el) => el.getAttribute('name') || '', input)).toLowerCase();
+                const placeholder = (await page.evaluate((el) => el.getAttribute('placeholder') || '', input)).toLowerCase();
+                const type = (await page.evaluate((el) => el.getAttribute('type') || '', input)).toLowerCase();
+                if (name.includes('artist') || placeholder.includes('artist')) {
+                    await input.type(payload.artistName, { delay: 50 });
                 }
-            });
-            // 3. Map form fields using AI
-            for (const field of formFields) {
-                const fieldNameLower = field.name.toLowerCase();
-                const placeholderLower = field.placeholder.toLowerCase();
-                if (fieldNameLower.includes('artist') || placeholderLower.includes('artist')) {
-                    postData[field.name] = payload.artistName;
+                else if (name.includes('title') || name.includes('song') || placeholder.includes('song') || placeholder.includes('title')) {
+                    await input.type(payload.songTitle, { delay: 50 });
                 }
-                else if (fieldNameLower.includes('title') || fieldNameLower.includes('song') || placeholderLower.includes('song')) {
-                    postData[field.name] = payload.songTitle;
+                else if (name.includes('spotify') || name.includes('url') || placeholder.includes('spotify') || placeholder.includes('url')) {
+                    await input.type(payload.spotifyUrl || payload.audioUrl || '', { delay: 50 });
                 }
-                else if (fieldNameLower.includes('spotify') || fieldNameLower.includes('url') || fieldNameLower.includes('link')) {
-                    postData[field.name] = payload.spotifyUrl || payload.audioUrl || '';
+                else if (name.includes('email') || placeholder.includes('email') || type === 'email') {
+                    await input.type(payload.email, { delay: 50 });
                 }
-                else if (fieldNameLower.includes('email') || fieldNameLower.includes('mail') || field.type === 'email') {
-                    postData[field.name] = payload.email;
+                else if (name.includes('message') || name.includes('pitch') || placeholder.includes('pitch') || placeholder.includes('description')) {
+                    await input.type(payload.pitchMessage, { delay: 50 });
                 }
-                else if (fieldNameLower.includes('message') || fieldNameLower.includes('bio') || fieldNameLower.includes('pitch')) {
-                    postData[field.name] = payload.pitchMessage;
-                }
-                else if (fieldNameLower.includes('epk') || fieldNameLower.includes('press')) {
-                    postData[field.name] = payload.epkUrl || '';
+                else if (name.includes('epk') || placeholder.includes('epk') || placeholder.includes('press')) {
+                    await input.type(payload.epkUrl || '', { delay: 50 });
                 }
             }
-            // 4. Submit form POST request
-            let submitRes;
-            if (formMethod === 'GET') {
-                submitRes = await axios_1.default.get(targetActionUrl, { params: postData, timeout: 10000 });
+            console.log('[FormAutomation] Submitting form by clicking submit button...');
+            // Find and click submit button
+            const submitButton = await page.$('button[type="submit"], input[type="submit"]');
+            if (submitButton) {
+                await Promise.all([
+                    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => { }),
+                    submitButton.click(),
+                ]);
             }
-            else {
-                submitRes = await axios_1.default.post(targetActionUrl, new URLSearchParams(postData).toString(), {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    },
-                    timeout: 10000,
-                });
-            }
-            // 5. Upload submission confirmation HTML snippet to Cloudinary as proof
-            const confirmationSnippet = Buffer.from(`
-        <html>
-          <body style="font-family: sans-serif; padding: 20px; background: #0f172a; color: #fff;">
-            <h2>Submission Proof Confirmation</h2>
-            <p><strong>Form URL:</strong> ${formUrl}</p>
-            <p><strong>Artist:</strong> ${payload.artistName}</p>
-            <p><strong>Song:</strong> ${payload.songTitle}</p>
-            <p><strong>Submitted To:</strong> ${targetActionUrl}</p>
-            <p><strong>HTTP Status:</strong> ${submitRes.status} OK</p>
-            <hr />
-            <pre>${String(submitRes.data).substring(0, 1000)}</pre>
-          </body>
-        </html>
-      `);
+            await new Promise((r) => setTimeout(r, 2000));
+            // Capture screenshot of submission confirmation page as proof receipt
+            const screenshotBuffer = await page.screenshot({ fullPage: true });
+            await browser.close();
+            console.log('[FormAutomation] Uploading screenshot proof to Cloudinary CDN...');
             let proofUrl = '';
             try {
-                proofUrl = await cloudinary_service_1.CloudinaryService.uploadProofBuffer(confirmationSnippet);
+                proofUrl = await cloudinary_service_1.CloudinaryService.uploadProofBuffer(Buffer.from(screenshotBuffer));
+                console.log(`✅ [FormAutomation] Proof Screenshot Uploaded to Cloudinary: ${proofUrl}`);
             }
             catch (cloudErr) {
-                console.warn('[CloudinaryUpload] Fallback proof url generated.');
+                console.warn('[CloudinaryUpload] Error uploading screenshot:', cloudErr.message);
             }
             return {
                 success: true,
                 proofUrl,
-                message: 'Form submitted successfully.',
+                message: 'Form filled, submitted, and proof captured successfully.',
             };
         }
         catch (err) {
-            console.warn(`[FormAutomation] Error submitting form to ${formUrl}:`, err.message);
+            if (browser)
+                await browser.close();
+            console.error(`[FormAutomation Error] on ${formUrl}:`, err.message);
             return {
                 success: false,
                 message: err.message,

@@ -16,7 +16,6 @@ const credit_routes_js_1 = __importDefault(require("./modules/credits/credit.rou
 const matching_routes_js_1 = __importDefault(require("./modules/matching/matching.routes.js"));
 const campaign_routes_js_1 = __importDefault(require("./modules/campaigns/campaign.routes.js"));
 const webhook_routes_js_1 = __importDefault(require("./modules/webhooks/webhook.routes.js"));
-const test_submission_routes_js_1 = __importDefault(require("./modules/testing/test-submission.routes.js"));
 exports.app = (0, express_1.default)();
 // Global Middlewares
 exports.app.use((0, cors_1.default)({
@@ -47,7 +46,6 @@ exports.app.use('/api/v1/matching', matching_routes_js_1.default);
 exports.app.use('/api/v1/campaigns', campaign_routes_js_1.default);
 exports.app.use('/api/v1/webhooks', webhook_routes_js_1.default);
 exports.app.use('/api/webhooks', webhook_routes_js_1.default);
-exports.app.use('/api/v1/test-submissions', test_submission_routes_js_1.default);
 // 404 Handler
 exports.app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint not found' });
