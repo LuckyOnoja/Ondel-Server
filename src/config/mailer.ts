@@ -48,6 +48,54 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
   }
 }
 
+export async function sendWaitlistConfirmationEmail(toEmail: string, artistName: string): Promise<boolean> {
+  const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
+
+  if (!isConfigured) {
+    console.log(`
+  =============================================================
+  📬 [DEVELOPMENT MAIL] Waitlist Confirmation for ${artistName} (${toEmail}):
+  "You're on the Ondel Waitlist! We are reviewing your release strategy."
+  =============================================================
+    `);
+    return true;
+  }
+
+  try {
+    await transporter.sendMail({
+      from: `"Ondel Team" <${env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `You're on the Ondel Waitlist, ${artistName}! 🎵`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #0c0d0e; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
+          <div style="margin-bottom: 20px;">
+            <span style="font-size: 12px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 1px;">Submission Confirmed</span>
+          </div>
+          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Welcome to the Ondel Waitlist, ${artistName}!</h2>
+          <p style="color: #a1a1aa; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
+            We received your release details and audio submission. Our team and Ondie AI are reviewing your submission and building your 5-pillar launch strategy:
+          </p>
+          <ul style="color: #d4d4d8; font-size: 14px; line-height: 1.8; padding-left: 20px; margin-bottom: 24px;">
+            <li>🎯 Personalised Release Roadmap</li>
+            <li>📅 30-Day Content Calendar</li>
+            <li>🎧 Playlist Pitching Targets</li>
+            <li>🤝 Creator Opportunities</li>
+            <li>✅ Execution Checklist</li>
+          </ul>
+          <p style="color: #71717a; font-size: 13px; line-height: 1.5;">
+            You will receive a notification email as soon as your strategy workspace is ready.
+          </p>
+        </div>
+      `,
+    });
+    console.log(`✅ [Mailer] Sent Waitlist Confirmation email successfully to ${toEmail}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ [Mailer Error] Failed to send waitlist confirmation email to ${toEmail}:`, error);
+    return false;
+  }
+}
+
 export async function sendStrategyDeliveredEmail(toEmail: string, artistName: string, shareToken: string): Promise<boolean> {
   const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
   const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;

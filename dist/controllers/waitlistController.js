@@ -72,6 +72,10 @@ async function submitWaitlist(req, res) {
                 status: 'SUBMITTED',
             },
         });
+        // Dispatch instant waitlist confirmation email to artist
+        (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName).catch((err) => {
+            console.error('[sendWaitlistConfirmationEmail error]:', err);
+        });
         // Link previous step logs to this submission if sessionId provided
         if (sessionId) {
             await prisma_js_1.prisma.waitlistStepLog.updateMany({

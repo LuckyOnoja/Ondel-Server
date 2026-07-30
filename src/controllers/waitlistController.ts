@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
-import { sendStrategyDeliveredEmail, sendWeeklyOpportunityEmail } from '../config/mailer.js';
+import { sendWaitlistConfirmationEmail, sendStrategyDeliveredEmail, sendWeeklyOpportunityEmail } from '../config/mailer.js';
 import { isCloudinaryConfigured, uploadAudioToCloudinary } from '../config/cloudinary.js';
 
 /**
@@ -77,6 +77,11 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
         headlineVariant: String(headlineVariant),
         status: 'SUBMITTED',
       },
+    });
+
+    // Dispatch instant waitlist confirmation email to artist
+    sendWaitlistConfirmationEmail(submission.email, submission.artistName).catch((err) => {
+      console.error('[sendWaitlistConfirmationEmail error]:', err);
     });
 
     // Link previous step logs to this submission if sessionId provided
