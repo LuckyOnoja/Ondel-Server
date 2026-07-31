@@ -2,12 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MatchingService = void 0;
 const prisma_1 = require("../../config/prisma");
-const client_1 = require("@prisma/client");
 class MatchingService {
     static async matchLeadsForCampaign(input) {
         const { categories, genres, countries, limit = 20 } = input;
         const where = {
-            status: client_1.LeadStatus.VERIFIED,
             acceptsSubmissions: true,
         };
         if (categories && categories.length > 0) {
@@ -27,9 +25,7 @@ class MatchingService {
                 { createdAt: 'desc' },
             ],
             include: {
-                contactPoints: {
-                    where: { isVerified: true },
-                },
+                contactPoints: true,
                 sources: true,
                 tags: true,
             },
@@ -46,6 +42,26 @@ class MatchingService {
                 verifiedContacts: lead.contactPoints,
                 relevanceScore: lead.relevanceScore || 0.85,
             })),
+        };
+    }
+    static async matchLeadsForSong(songId, limit = 20) {
+        const song = await prisma_1.prisma.song.findUnique({
+            where: { id: songId },
+        });
+        if (!song) {
+            throw new Error(`Song with ID ${songId} not found`);
+        }
+        const genresToMatch = [song.genre, ...(song.subgenres || [])];
+        const result = await this.matchLeadsForCampaign({
+            genres: genresToMatch,
+            limit,
+        });
+        return {
+            songId,
+            songTitle: song.title,
+            genre: song.genre,
+            totalMatches: result.totalMatches,
+            leads: result.leads,
         };
     }
 }

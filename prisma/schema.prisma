@@ -245,6 +245,7 @@ model Campaign {
   targetCategories LeadCategory[]
   targetGenres     String[]
   targetCountries  String[]
+  type             CampaignType     @default(GENERAL)
   status           CampaignStatus   @default(DRAFT)
   budgetCredits    Int
   consumedCredits  Int              @default(0)
@@ -388,6 +389,11 @@ enum CampaignStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+}
+
+enum CampaignType {
+  GENERAL
+  TARGETED
 }
 
 enum CampaignTargetStatus {

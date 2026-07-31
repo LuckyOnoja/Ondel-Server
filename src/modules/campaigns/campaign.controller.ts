@@ -19,7 +19,7 @@ export class CampaignController {
       const result = await CampaignService.launchCampaign(id);
       res.status(200).json({ success: true, data: result });
     } catch (error: any) {
-      res.status(400).json({ success: false, error: error.message });
+      res.status(400).json({ success: false, error: error.message || error });
     }
   }
 
@@ -29,7 +29,21 @@ export class CampaignController {
       const campaign = await CampaignService.getCampaign(id);
       res.status(200).json({ success: true, data: campaign });
     } catch (error: any) {
-      res.status(404).json({ success: false, error: error.message });
+      res.status(404).json({ success: false, error: error.message || error });
+    }
+  }
+
+  static async getUserCampaigns(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = String(req.params.userId || req.query.userId);
+      if (!userId || userId === 'undefined') {
+        res.status(400).json({ success: false, error: 'userId is required' });
+        return;
+      }
+      const campaigns = await CampaignService.getUserCampaigns(userId);
+      res.status(200).json({ success: true, data: campaigns });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || error });
     }
   }
 }

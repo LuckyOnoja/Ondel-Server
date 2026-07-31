@@ -29,5 +29,19 @@ class CloudinaryService {
         });
         return res.secure_url;
     }
+    static async uploadAudioBuffer(buffer, folder = 'song_demos') {
+        return new Promise((resolve, reject) => {
+            const uploadStream = cloudinary_1.v2.uploader.upload_stream({
+                folder,
+                resource_type: 'video', // Cloudinary uses resource_type 'video' or 'auto' for audio files (.mp3, .wav)
+            }, (error, result) => {
+                if (error || !result) {
+                    return reject(error || new Error('Cloudinary audio upload failed'));
+                }
+                resolve(result.secure_url);
+            });
+            uploadStream.end(buffer);
+        });
+    }
 }
 exports.CloudinaryService = CloudinaryService;

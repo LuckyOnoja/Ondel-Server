@@ -21,5 +21,16 @@ class MatchingController {
             res.status(400).json({ success: false, error: error.message || error });
         }
     }
+    static async getMatchesForSong(req, res) {
+        try {
+            const songId = String(req.params.songId);
+            const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+            const results = await matching_service_1.MatchingService.matchLeadsForSong(songId, limit);
+            res.status(200).json({ success: true, data: results });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, error: error.message || error });
+        }
+    }
 }
 exports.MatchingController = MatchingController;

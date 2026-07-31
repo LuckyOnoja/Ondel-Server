@@ -9,6 +9,7 @@ import discoveryRoutes from './modules/discovery/discovery.routes.js';
 import creditRoutes from './modules/credits/credit.routes.js';
 import matchingRoutes from './modules/matching/matching.routes.js';
 import campaignRoutes from './modules/campaigns/campaign.routes.js';
+import songRoutes from './modules/songs/song.routes.js';
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
 
 export const app = express();
@@ -44,6 +45,7 @@ app.use('/api/v1/discovery', discoveryRoutes);
 app.use('/api/v1/credits', creditRoutes);
 app.use('/api/v1/matching', matchingRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
+app.use('/api/v1/songs', songRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
 

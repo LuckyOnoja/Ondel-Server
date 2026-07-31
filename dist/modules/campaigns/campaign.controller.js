@@ -21,7 +21,7 @@ class CampaignController {
             res.status(200).json({ success: true, data: result });
         }
         catch (error) {
-            res.status(400).json({ success: false, error: error.message });
+            res.status(400).json({ success: false, error: error.message || error });
         }
     }
     static async getCampaign(req, res) {
@@ -31,7 +31,21 @@ class CampaignController {
             res.status(200).json({ success: true, data: campaign });
         }
         catch (error) {
-            res.status(404).json({ success: false, error: error.message });
+            res.status(404).json({ success: false, error: error.message || error });
+        }
+    }
+    static async getUserCampaigns(req, res) {
+        try {
+            const userId = String(req.params.userId || req.query.userId);
+            if (!userId || userId === 'undefined') {
+                res.status(400).json({ success: false, error: 'userId is required' });
+                return;
+            }
+            const campaigns = await campaign_service_1.CampaignService.getUserCampaigns(userId);
+            res.status(200).json({ success: true, data: campaigns });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, error: error.message || error });
         }
     }
 }

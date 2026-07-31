@@ -20,4 +20,15 @@ export class MatchingController {
       res.status(400).json({ success: false, error: error.message || error });
     }
   }
+
+  static async getMatchesForSong(req: Request, res: Response): Promise<void> {
+    try {
+      const songId = String(req.params.songId);
+      const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+      const results = await MatchingService.matchLeadsForSong(songId, limit);
+      res.status(200).json({ success: true, data: results });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  }
 }

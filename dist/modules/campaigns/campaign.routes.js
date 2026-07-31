@@ -4,6 +4,7 @@ const express_1 = require("express");
 const campaign_controller_1 = require("./campaign.controller");
 const router = (0, express_1.Router)();
 router.post('/', campaign_controller_1.CampaignController.createCampaign);
+router.get('/user/:userId', campaign_controller_1.CampaignController.getUserCampaigns);
 router.get('/:id', campaign_controller_1.CampaignController.getCampaign);
 router.post('/:id/launch', campaign_controller_1.CampaignController.launchCampaign);
 exports.default = router;
