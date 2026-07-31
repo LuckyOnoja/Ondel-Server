@@ -5,7 +5,6 @@ import { CreateSongSchema } from './song.types';
 export class SongController {
   static async createSong(req: Request, res: Response): Promise<void> {
     try {
-      // If request came as multipart/form-data with JSON in body or individual fields
       let bodyData = req.body;
       if (typeof bodyData.subgenres === 'string') {
         try {
@@ -27,6 +26,16 @@ export class SongController {
 
       const song = await SongService.createSong(validated, audioBuffer);
       res.status(201).json({ success: true, data: song });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || error });
+    }
+  }
+
+  static async scrutinizeSong(req: Request, res: Response): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const updatedSong = await SongService.scrutinizeSong(id);
+      res.status(200).json({ success: true, data: updatedSong });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || error });
     }

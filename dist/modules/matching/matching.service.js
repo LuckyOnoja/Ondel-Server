@@ -47,21 +47,88 @@ class MatchingService {
     static async matchLeadsForSong(songId, limit = 20) {
         const song = await prisma_1.prisma.song.findUnique({
             where: { id: songId },
+            include: { artist: true },
         });
         if (!song) {
             throw new Error(`Song with ID ${songId} not found`);
         }
-        const genresToMatch = [song.genre, ...(song.subgenres || [])];
-        const result = await this.matchLeadsForCampaign({
-            genres: genresToMatch,
-            limit,
+        const songMetadata = song.metadata || {};
+        const primaryGenre = song.genre.toLowerCase();
+        const subgenres = (song.subgenres || []).map((s) => s.toLowerCase());
+        const referenceArtists = (song.similarArtists || []).map((a) => a.toLowerCase());
+        const songCountry = song.artist?.country ? song.artist.country.toLowerCase() : null;
+        // Retrieve candidate leads that match genre OR country (regional wildcard) OR subgenres
+        const candidateLeads = await prisma_1.prisma.lead.findMany({
+            where: {
+                acceptsSubmissions: true,
+            },
+            include: {
+                contactPoints: true,
+                tags: true,
+            },
+            take: limit * 3, // Over-fetch candidates to perform weighted scoring
         });
+        // Score candidate leads
+        const scoredLeads = candidateLeads.map((lead) => {
+            let score = 0.50; // Base baseline score
+            const leadGenres = (lead.genres || []).map((g) => g.toLowerCase());
+            const leadCountry = lead.country ? lead.country.toLowerCase() : null;
+            const leadTags = (lead.tags || []).map((t) => t.tag.toLowerCase());
+            // 1. Primary Genre Match (+0.25)
+            const hasPrimaryGenreMatch = leadGenres.some((g) => g.includes(primaryGenre) || primaryGenre.includes(g));
+            if (hasPrimaryGenreMatch) {
+                score += 0.25;
+            }
+            // 2. Subgenre Match (+0.15)
+            const hasSubgenreMatch = subgenres.some((sub) => leadGenres.some((g) => g.includes(sub) || sub.includes(g)));
+            if (hasSubgenreMatch) {
+                score += 0.15;
+            }
+            // 3. Reference Artist & Tag Overlap (+0.10)
+            const hasReferenceArtistMatch = referenceArtists.some((ref) => leadTags.some((tag) => tag.includes(ref) || ref.includes(tag)));
+            if (hasReferenceArtistMatch) {
+                score += 0.10;
+            }
+            // 4. Regional / Country Wildcard Match (+0.10)
+            // Curators in the artist's region match even across genres
+            if (songCountry && leadCountry && (leadCountry === songCountry || leadCountry.includes(songCountry))) {
+                score += 0.10;
+            }
+            // 5. Verified Contact Bonus (+0.05)
+            if (lead.contactPoints.some((cp) => cp.isVerified)) {
+                score += 0.05;
+            }
+            const finalRelevanceScore = Math.min(0.99, parseFloat(score.toFixed(2)));
+            return {
+                id: lead.id,
+                name: lead.name,
+                organization: lead.organization,
+                category: lead.category,
+                country: lead.country,
+                genres: lead.genres,
+                verifiedContacts: lead.contactPoints,
+                relevanceScore: finalRelevanceScore,
+                matchReasons: [
+                    ...(hasPrimaryGenreMatch ? [`Matches genre "${song.genre}"`] : []),
+                    ...(hasSubgenreMatch ? ['Matches subgenre & vibe tags'] : []),
+                    ...(hasReferenceArtistMatch ? ['Similar reference artist match'] : []),
+                    ...(songCountry && leadCountry === songCountry ? [`Regional curator for ${lead.country}`] : []),
+                ],
+            };
+        });
+        // Sort by relevance score descending
+        scoredLeads.sort((a, b) => b.relevanceScore - a.relevanceScore);
+        const finalMatches = scoredLeads.slice(0, limit);
         return {
             songId,
             songTitle: song.title,
             genre: song.genre,
-            totalMatches: result.totalMatches,
-            leads: result.leads,
+            subgenres: song.subgenres,
+            soundVibe: song.soundVibe,
+            similarArtists: song.similarArtists,
+            scrutinizedAt: songMetadata.scrutinizedAt || null,
+            totalMatches: finalMatches.length,
+            leads: finalMatches,
         };
     }
 }

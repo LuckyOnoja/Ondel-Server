@@ -10,6 +10,7 @@ const upload = multer({
 const router = Router();
 
 router.post('/', upload.single('audioDemo'), SongController.createSong);
+router.post('/:id/scrutinize', SongController.scrutinizeSong);
 router.get('/user/:userId', SongController.getUserSongs);
 router.get('/:id', SongController.getSongById);
 

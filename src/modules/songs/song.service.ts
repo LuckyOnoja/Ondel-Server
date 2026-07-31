@@ -1,6 +1,7 @@
 import { prisma } from '../../config/prisma';
 import { CreateSongDTO } from './song.types';
 import { CloudinaryService } from '../../services/cloudinary.service';
+import { AudioScrutinizerService } from './audio-scrutinizer.service';
 
 export class SongService {
   static async createSong(dto: CreateSongDTO, audioFileBuffer?: Buffer) {
@@ -51,7 +52,17 @@ export class SongService {
       },
     });
 
+    // 4. Trigger asynchronous 3-Layer AI & Audio Scrutinizer Pipeline
+    AudioScrutinizerService.scrutinizeSong(song.id, audioFileBuffer).catch((err) => {
+      console.warn('[SongService] Background audio scrutinization failed:', err.message);
+    });
+
     return song;
+  }
+
+  static async scrutinizeSong(songId: string) {
+    await AudioScrutinizerService.scrutinizeSong(songId);
+    return this.getSongById(songId);
   }
 
   static async getUserSongs(userId: string) {

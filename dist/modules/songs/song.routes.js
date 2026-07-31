@@ -12,6 +12,7 @@ const upload = (0, multer_1.default)({
 });
 const router = (0, express_1.Router)();
 router.post('/', upload.single('audioDemo'), song_controller_1.SongController.createSong);
+router.post('/:id/scrutinize', song_controller_1.SongController.scrutinizeSong);
 router.get('/user/:userId', song_controller_1.SongController.getUserSongs);
 router.get('/:id', song_controller_1.SongController.getSongById);
 exports.default = router;

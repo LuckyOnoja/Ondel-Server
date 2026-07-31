@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SongService = void 0;
 const prisma_1 = require("../../config/prisma");
 const cloudinary_service_1 = require("../../services/cloudinary.service");
+const audio_scrutinizer_service_1 = require("./audio-scrutinizer.service");
 class SongService {
     static async createSong(dto, audioFileBuffer) {
         const { userId, artistName, title, genre, subgenres, spotifyUrl, epkUrl, similarArtists, soundVibe } = dto;
@@ -48,7 +49,15 @@ class SongService {
                 artist: true,
             },
         });
+        // 4. Trigger asynchronous 3-Layer AI & Audio Scrutinizer Pipeline
+        audio_scrutinizer_service_1.AudioScrutinizerService.scrutinizeSong(song.id, audioFileBuffer).catch((err) => {
+            console.warn('[SongService] Background audio scrutinization failed:', err.message);
+        });
         return song;
+    }
+    static async scrutinizeSong(songId) {
+        await audio_scrutinizer_service_1.AudioScrutinizerService.scrutinizeSong(songId);
+        return this.getSongById(songId);
     }
     static async getUserSongs(userId) {
         const songs = await prisma_1.prisma.song.findMany({

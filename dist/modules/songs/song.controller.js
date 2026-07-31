@@ -6,7 +6,6 @@ const song_types_1 = require("./song.types");
 class SongController {
     static async createSong(req, res) {
         try {
-            // If request came as multipart/form-data with JSON in body or individual fields
             let bodyData = req.body;
             if (typeof bodyData.subgenres === 'string') {
                 try {
@@ -28,6 +27,16 @@ class SongController {
             const audioBuffer = req.file ? req.file.buffer : undefined;
             const song = await song_service_1.SongService.createSong(validated, audioBuffer);
             res.status(201).json({ success: true, data: song });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, error: error.message || error });
+        }
+    }
+    static async scrutinizeSong(req, res) {
+        try {
+            const id = String(req.params.id);
+            const updatedSong = await song_service_1.SongService.scrutinizeSong(id);
+            res.status(200).json({ success: true, data: updatedSong });
         }
         catch (error) {
             res.status(400).json({ success: false, error: error.message || error });
