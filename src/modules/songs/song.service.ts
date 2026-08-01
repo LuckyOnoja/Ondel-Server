@@ -45,6 +45,8 @@ export class SongService {
         soundVibe,
         metadata: {
           spotifyUrl: spotifyUrl || null,
+          userBpm: dto.bpm || null,
+          estimatedBpm: dto.bpm || null,
         },
       },
       include: {
