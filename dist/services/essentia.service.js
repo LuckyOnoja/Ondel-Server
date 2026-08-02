@@ -9,13 +9,13 @@ const audio_decode_1 = __importDefault(require("audio-decode"));
 // @ts-ignore
 const essentia_js_1 = require("essentia.js");
 // @ts-ignore
-const essentia_wasm_es_js_1 = __importDefault(require("essentia.js/dist/essentia-wasm.es.js"));
+const essentia_wasm_umd_js_1 = __importDefault(require("essentia.js/dist/essentia-wasm.umd.js"));
 class EssentiaService {
     static essentiaInstance = null;
     static async getEssentia() {
         if (!this.essentiaInstance) {
             try {
-                this.essentiaInstance = new essentia_js_1.Essentia(essentia_wasm_es_js_1.default);
+                this.essentiaInstance = new essentia_js_1.Essentia(essentia_wasm_umd_js_1.default);
                 console.log('✅ [EssentiaService] Essentia.js WebAssembly Engine Loaded Successfully!');
             }
             catch (err) {

@@ -3,7 +3,7 @@ import audioDecode from 'audio-decode';
 // @ts-ignore
 import { Essentia } from 'essentia.js';
 // @ts-ignore
-import EssentiaWasm from 'essentia.js/dist/essentia-wasm.es.js';
+import EssentiaWasm from 'essentia.js/dist/essentia-wasm.umd.js';
 
 export interface EssentiaAudioFeatures {
   bpm?: number;
