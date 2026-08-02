@@ -1,30 +1,32 @@
 import axios from 'axios';
 import { env } from '../../config/env';
 import { SpotifyService } from '../../services/spotify.service';
+import { EssentiaService, EssentiaAudioFeatures } from '../../services/essentia.service';
 import { AudioDSPService, DSPAnalysisResult } from '../../services/audio-dsp.service';
 import { prisma } from '../../config/prisma';
 
 export interface ScrutinizedAudioResult {
   microSubgenres: string[];
-  moodVibe: string;
-  estimatedBpm: number;
-  energyLevel: number;
+  moodVibe?: string;
+  estimatedBpm?: number;
+  energyLevel?: number;
   referenceArtists: string[];
-  targetCuratorNotes: string;
+  targetCuratorNotes?: string;
   spotifyAudioFeatures?: any;
-  dspAnalysis?: DSPAnalysisResult;
+  essentiaFeatures?: EssentiaAudioFeatures;
 }
 
 export class AudioScrutinizerService {
   /**
-   * DeepSeek A&R Engine: Analyzes track metadata and DSP signal measurements to generate exact micro-subgenres, mood/vibe, and reference artists
+   * DeepSeek A&R Engine: Ingests Audio DSP & Essentia MIR features to generate exact micro-subgenres, mood/vibe, and reference artists
    */
   static async analyzeTrackWithDeepSeek(
     songTitle: string,
     artistName: string,
     genre: string,
     userSubgenres: string[],
-    dspSignal?: DSPAnalysisResult
+    essentiaData?: EssentiaAudioFeatures,
+    dspData?: DSPAnalysisResult
   ): Promise<ScrutinizedAudioResult | null> {
     const deepseekKey = env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
     if (!deepseekKey) {
@@ -32,31 +34,52 @@ export class AudioScrutinizerService {
       return null;
     }
 
-    const bpm = dspSignal?.exactBpm || 118;
-    const energy = dspSignal?.energyLevel || 7;
-    const loudness = dspSignal?.rmsLoudnessDb || -10;
-    const dynamics = dspSignal?.dynamicRange || 'Balanced Dynamics';
+    const bpmStr = essentiaData?.bpm
+      ? `${essentiaData.bpm} BPM`
+      : dspData?.exactBpm
+      ? `${dspData.exactBpm} BPM`
+      : 'Unmeasured';
+
+    const keyStr = essentiaData?.key || 'Unspecified';
+    const danceability = essentiaData?.danceability !== undefined
+      ? essentiaData.danceability
+      : 'Unmeasured';
+
+    const energy = essentiaData?.energy !== undefined
+      ? `${Math.round(essentiaData.energy * 10)}/10`
+      : dspData?.energyLevel !== undefined
+      ? `${dspData.energyLevel}/10`
+      : 'Unmeasured';
+
+    const loudness = essentiaData?.loudnessDb !== undefined
+      ? `${essentiaData.loudnessDb} dB`
+      : dspData?.rmsLoudnessDb !== undefined
+      ? `${dspData.rmsLoudnessDb} dB`
+      : 'Unmeasured';
 
     try {
-      console.log(`🧠 [DeepSeek A&R Engine] Analyzing Track "${songTitle}" by ${artistName} (${genre}, ${bpm} BPM)...`);
+      console.log(`🧠 [DeepSeek A&R Engine] Analyzing Track "${songTitle}" by ${artistName} (${genre})...`);
 
-      const prompt = `You are a world-class music A&R, audio engineer, and playlist promotion strategist.
-Analyze this track:
+      const prompt = `You are a world-class music A&R, audio engineer, and global playlist promotion strategist.
+Analyze this track using exact audio DSP & MIR signal data:
+
+TRACK INFO:
 - Song Title: "${songTitle}"
 - Artist Name: "${artistName}"
-- Primary Genre: "${genre}"
-- User Declared Subgenres: "${userSubgenres.join(', ') || genre}"
+- Declared Genre: "${genre}"
+- Subgenres: "${userSubgenres.join(', ') || genre}"
 
-EXACT MATHEMATICAL AUDIO DSP SIGNAL MEASUREMENTS:
-- Measured Tempo (BPM): ${bpm} BPM
-- RMS Energy Level: ${energy} / 10
-- RMS Loudness: ${loudness} dB
-- Dynamic Range: ${dynamics}
+AUDIO DSP MEASUREMENTS:
+- Exact Measured BPM: ${bpmStr}
+- Musical Key & Scale: "${keyStr}"
+- Danceability: ${danceability}
+- Energy Level: ${energy}
+- Loudness: ${loudness}
 
 CRITICAL TASK:
-1. Micro-Subgenres: Identify 2-4 highly specific micro-subgenres (e.g. Amapiano Fusion, Street Hop, Afro-R&B, Melodic Trap, Alternative Pop).
-2. Mood & Vibe: Emotional tone and aesthetic based on tempo (${bpm} BPM) and energy (${energy}/10).
-3. Similar Reference Artists: List 3-5 mainstream and indie artists that this track's sound and vibe ACTUALLY MATCH. Do not give generic default lists. Tailor specifically to the title, genre, and subgenre style!
+1. Micro-Subgenres: Identify 2-4 highly specific micro-subgenres for this track.
+2. Mood & Vibe: Emotional tone and aesthetic of this track.
+3. Similar Reference Artists: List 3-5 mainstream and indie artists that this track's sound and style ACTUALLY MATCH globally.
 4. Target Curator Notes: Concise pitch recommendation for playlist curators, radio DJs, and blogs.
 
 Return a valid JSON object matching EXACTLY this structure:
@@ -99,12 +122,12 @@ Return a valid JSON object matching EXACTLY this structure:
         console.log(`✅ [DeepSeek A&R Engine] Analysis Completed Successfully for "${songTitle}"!`);
         return {
           microSubgenres: Array.isArray(parsed.microSubgenres) ? parsed.microSubgenres : [genre],
-          moodVibe: parsed.moodVibe || `${genre} Vibe`,
-          estimatedBpm: bpm,
-          energyLevel: energy,
+          moodVibe: parsed.moodVibe || undefined,
+          estimatedBpm: essentiaData?.bpm ? Math.round(essentiaData.bpm) : dspData?.exactBpm ? Math.round(dspData.exactBpm) : undefined,
+          energyLevel: essentiaData?.energy !== undefined ? Math.round(essentiaData.energy * 10) : dspData?.energyLevel !== undefined ? dspData.energyLevel : undefined,
           referenceArtists: Array.isArray(parsed.referenceArtists) ? parsed.referenceArtists : [],
-          targetCuratorNotes: parsed.targetCuratorNotes || `Target ${genre} playlist curators and radio DJs.`,
-          dspAnalysis: dspSignal,
+          targetCuratorNotes: parsed.targetCuratorNotes || undefined,
+          essentiaFeatures: essentiaData,
         };
       }
     } catch (err: any) {
@@ -115,56 +138,8 @@ Return a valid JSON object matching EXACTLY this structure:
     return null;
   }
 
-  static getFallbackArtistsForGenre(genre: string, title?: string): string[] {
-    const norm = (genre + ' ' + (title || '')).toLowerCase();
-    const hash = (title || 'track').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-
-    if (norm.includes('amapiano')) {
-      const clusters = [
-        ['Uncle Waffles', 'Kabza De Small', 'DJ Maphorisa', 'Felo Le Tee'],
-        ['Musa Keys', 'Tyler ICU', 'Young Stunna', 'Vigro Deep'],
-        ['Asake', 'Seyi Vibez', 'Shallipoppi', 'Kizz Daniel'],
-      ];
-      return clusters[hash % clusters.length];
-    }
-    if (norm.includes('afro')) {
-      const clusters = [
-        ['Asake', 'Burna Boy', 'Rema', 'Shallipoppi'],
-        ['Wizkid', 'Davido', 'Omah Lay', 'Fireboy DML'],
-        ['Ayra Starr', 'Tems', 'Victony', 'Rugged'],
-        ['Seyi Vibez', 'BNXN', 'Lojay', 'Kizz Daniel'],
-      ];
-      return clusters[hash % clusters.length];
-    }
-    if (norm.includes('hip hop') || norm.includes('rap') || norm.includes('drill')) {
-      const clusters = [
-        ['Drake', 'Travis Scott', '21 Savage', 'Future'],
-        ['Kendrick Lamar', 'J. Cole', 'Baby Keem', 'Pusha T'],
-        ['Central Cee', 'Stormzy', 'Dave', 'Skepta'],
-      ];
-      return clusters[hash % clusters.length];
-    }
-    if (norm.includes('pop') || norm.includes('indie')) {
-      const clusters = [
-        ['Dua Lipa', 'The Weeknd', 'Harry Styles', 'Doja Cat'],
-        ['Billie Eilish', 'Olivia Rodrigo', 'Tame Impala', 'Lorde'],
-        ['Sabrina Carpenter', 'Chappell Roan', 'Gracie Abrams', 'Troye Sivan'],
-      ];
-      return clusters[hash % clusters.length];
-    }
-    if (norm.includes('r&b') || norm.includes('soul')) {
-      const clusters = [
-        ['SZA', 'Giveon', 'Daniel Caesar', 'H.E.R.'],
-        ['Summer Walker', 'Brent Faiyaz', 'Lucky Daye', 'Kehlani'],
-        ['Frank Ocean', 'Steve Lacy', 'Jhené Aiko', 'Syd'],
-      ];
-      return clusters[hash % clusters.length];
-    }
-    return ['Burna Boy', 'Wizkid', 'Rema', 'Asake'];
-  }
-
   /**
-   * Full Scrutinizer Workflow combining Layer 0 (DSP Engine), Layer 1 (DeepSeek A&R Engine), & Layer 2 (Spotify API)
+   * Full Scrutinizer Workflow combining Layer 0 (Node Audio DSP & Essentia.js MIR Engine), Layer 1 (DeepSeek A&R Engine), & Layer 2 (Spotify API)
    */
   static async scrutinizeSong(songId: string, audioBuffer?: Buffer): Promise<void> {
     try {
@@ -176,22 +151,25 @@ Return a valid JSON object matching EXACTLY this structure:
       if (!song) return;
 
       console.log(`\n================================================================================`);
-      console.log(`🔍 [Ondel Scrutinizer Engine] Starting Track & Audio Analysis for "${song.title}"...`);
+      console.log(`🔍 [Ondel Scrutinizer Engine] Starting Track Analysis for "${song.title}"...`);
       console.log(`================================================================================`);
 
-      // 1. Layer 0: Perform Deterministic Audio DSP Signal Processing
+      // 1. Layer 0: Perform Node AudioDSP & Essentia.js MIR Analysis if buffer provided
+      let essentiaResult: EssentiaAudioFeatures | undefined = undefined;
       let dspResult: DSPAnalysisResult | undefined = undefined;
+
       if (audioBuffer) {
         dspResult = await AudioDSPService.analyzeAudioBuffer(audioBuffer);
-        console.log(`⚡ [Audio DSP Processor] Measured Tempo: ${dspResult.exactBpm} BPM | RMS Loudness: ${dspResult.rmsLoudnessDb} dB | Method: ${dspResult.detectionMethod}`);
+        essentiaResult = await EssentiaService.analyzeAudioBuffer(audioBuffer, song.genre);
       }
 
-      // 2. Layer 1: DeepSeek AI A&R Engine Analysis (Replaces Gemini API)
+      // 2. Layer 1: DeepSeek AI A&R Engine Analysis
       const aiResult = await this.analyzeTrackWithDeepSeek(
         song.title,
         song.artist?.name || 'Artist',
         song.genre,
         song.subgenres || [],
+        essentiaResult,
         dspResult
       );
 
@@ -209,7 +187,7 @@ Return a valid JSON object matching EXACTLY this structure:
         spotifyRelatedArtists = await SpotifyService.getRelatedArtistsByName(song.artist.name);
       }
 
-      // Combine reference artists from DeepSeek AI analysis, song model, and Spotify
+      // Combine reference artists strictly from DeepSeek AI analysis, song model, and Spotify API
       const combinedReferenceArtists = Array.from(
         new Set([
           ...(song.similarArtists || []),
@@ -225,35 +203,39 @@ Return a valid JSON object matching EXACTLY this structure:
         ])
       ).filter(Boolean);
 
-      // Final BPM & Energy calculation: Spotify DSP > Audio DSP Processor > AI Fallback
+      // Final BPM & Energy calculation (Spotify DSP > Essentia MIR > Node DSP > AI)
       const finalBpm = spotifyAudioFeatures?.tempo
         ? Math.round(spotifyAudioFeatures.tempo)
-        : dspResult?.exactBpm || aiResult?.estimatedBpm || 118;
+        : essentiaResult?.bpm
+        ? Math.round(essentiaResult.bpm)
+        : dspResult?.exactBpm
+        ? Math.round(dspResult.exactBpm)
+        : aiResult?.estimatedBpm || undefined;
 
       const finalEnergy = spotifyAudioFeatures?.energy
         ? Math.round(spotifyAudioFeatures.energy * 10)
-        : dspResult?.energyLevel || aiResult?.energyLevel || 7;
+        : essentiaResult?.energy !== undefined
+        ? Math.round(essentiaResult.energy * 10)
+        : dspResult?.energyLevel !== undefined
+        ? dspResult.energyLevel
+        : aiResult?.energyLevel || undefined;
 
-      const vibe = aiResult?.moodVibe || song.soundVibe || `${song.genre} Vibe`;
-
-      // Fallback similar reference artists if none returned
-      if (combinedReferenceArtists.length === 0) {
-        combinedReferenceArtists.push(...this.getFallbackArtistsForGenre(song.genre, song.title));
-      }
-
-      const curatorNotes = aiResult?.targetCuratorNotes || `Target ${song.genre} & ${combinedSubgenres.join(', ') || song.genre} official playlist curators, radio DJs, and music blogs.`;
+      const musicalKey = essentiaResult?.key || undefined;
+      const vibe = aiResult?.moodVibe || song.soundVibe || undefined;
+      const curatorNotes = aiResult?.targetCuratorNotes || undefined;
 
       // Save scrutinized analysis into Song metadata and database fields
       const updatedMetadata = {
         ...existingMetadata,
         scrutinizedAt: new Date().toISOString(),
-        moodVibe: vibe,
-        estimatedBpm: finalBpm,
-        energyLevel: finalEnergy,
-        danceability: spotifyAudioFeatures?.danceability || null,
+        moodVibe: vibe || null,
+        estimatedBpm: finalBpm || null,
+        energyLevel: finalEnergy || null,
+        musicalKey: musicalKey || null,
+        danceability: spotifyAudioFeatures?.danceability || essentiaResult?.danceability || null,
         valence: spotifyAudioFeatures?.valence || null,
-        targetCuratorNotes: curatorNotes,
-        dspAnalysis: dspResult || null,
+        targetCuratorNotes: curatorNotes || null,
+        essentiaFeatures: essentiaResult || null,
         spotifyAudioFeatures,
       };
 
@@ -262,28 +244,29 @@ Return a valid JSON object matching EXACTLY this structure:
         data: {
           subgenres: combinedSubgenres,
           similarArtists: combinedReferenceArtists,
-          soundVibe: vibe,
+          soundVibe: vibe || null,
           metadata: updatedMetadata,
         },
       });
 
       // Output comprehensive server console analysis card
       console.log(`\n================================================================================`);
-      console.log(`✅ [Ondel Scrutinizer Engine] AUDIO & TRACK ANALYSIS COMPLETE`);
+      console.log(`✅ [Ondel Scrutinizer Engine] AUDIO DSP & AI TRACK ANALYSIS COMPLETE`);
       console.log(`================================================================================`);
       console.log(`📌 Track Title        : "${song.title}"`);
       console.log(`👤 Artist Name        : ${song.artist?.name || 'Unknown Artist'}`);
-      console.log(`🎸 Primary Genre      : ${song.genre}`);
-      console.log(`🔥 Micro-Subgenres    : ${combinedSubgenres.length > 0 ? combinedSubgenres.join(', ') : 'Afro-Pop / Urban Fusion'}`);
-      console.log(`⚡ Energy Level       : ${finalEnergy} / 10 ${dspResult ? `(RMS: ${dspResult.rmsLoudnessDb} dB)` : ''}`);
-      console.log(`🥁 Measured Tempo     : ${finalBpm} BPM ${dspResult ? `[Method: ${dspResult.detectionMethod}]` : ''}`);
-      console.log(`✨ Mood & Vibe        : ${vibe}`);
-      console.log(`🎤 DeepSeek Sounds Like: ${combinedReferenceArtists.join(', ')}`);
+      console.log(`🎸 Declared Genre     : ${song.genre}`);
+      console.log(`🎹 Musical Key        : ${musicalKey || 'Unmeasured'}`);
+      console.log(`🔥 Micro-Subgenres    : ${combinedSubgenres.length > 0 ? combinedSubgenres.join(', ') : 'None'}`);
+      console.log(`⚡ Energy Level       : ${finalEnergy !== undefined ? `${finalEnergy} / 10` : 'Unmeasured'}`);
+      console.log(`💃 Danceability       : ${essentiaResult?.danceability ? `${essentiaResult.danceability} / 1.0` : 'Unmeasured'}`);
+      console.log(`🥁 Measured Tempo     : ${finalBpm ? `${finalBpm} BPM` : 'Unmeasured'} [Method: ${dspResult?.exactBpm ? 'NODE_DSP' : 'ESSENTIA'}]`);
+      console.log(`✨ Mood & Vibe        : ${vibe || 'Unmeasured'}`);
+      console.log(`🎤 Real Reference Artists: ${combinedReferenceArtists.length > 0 ? combinedReferenceArtists.join(', ') : 'None Extracted Yet'}`);
       console.log(`--------------------------------------------------------------------------------`);
-      console.log(`🎯 PLAYLISTER MATCHING INSIGHTS & RECOMMENDATIONS:`);
-      console.log(`  • Ideal Curators   : ${curatorNotes}`);
-      console.log(`  • Target Audiences : Fans of ${combinedReferenceArtists.slice(0, 3).join(', ')}`);
-      console.log(`  • Pitch Campaign   : Recommend 1-on-1 Targeted Outreach & Auto-Matched Campaign`);
+      console.log(`🎯 GLOBAL PLAYLISTER MATCHING INSIGHTS:`);
+      console.log(`  • Ideal Curators   : ${curatorNotes || `Target ${song.genre} playlist curators & radio DJs`}`);
+      console.log(`  • Target Audiences : Fans of ${combinedReferenceArtists.length > 0 ? combinedReferenceArtists.slice(0, 3).join(', ') : song.genre}`);
       console.log(`================================================================================\n`);
     } catch (err: any) {
       console.error(`[AudioScrutinizer Error] for song ${songId}:`, err.message);
