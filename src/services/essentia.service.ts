@@ -1,7 +1,9 @@
 // @ts-ignore
 import audioDecode from 'audio-decode';
 // @ts-ignore
-import { Essentia, EssentiaWasm } from 'essentia.js';
+import { Essentia } from 'essentia.js';
+// @ts-ignore
+import EssentiaWasm from 'essentia.js/dist/essentia-wasm.es.js';
 
 export interface EssentiaAudioFeatures {
   bpm?: number;
@@ -19,8 +21,7 @@ export class EssentiaService {
   private static async getEssentia(): Promise<any> {
     if (!this.essentiaInstance) {
       try {
-        const wasmModule = typeof EssentiaWasm === 'function' ? await EssentiaWasm() : EssentiaWasm;
-        this.essentiaInstance = new Essentia(wasmModule);
+        this.essentiaInstance = new Essentia(EssentiaWasm);
         console.log('✅ [EssentiaService] Essentia.js WebAssembly Engine Loaded Successfully!');
       } catch (err: any) {
         console.warn('⚠️ [EssentiaService] WebAssembly initialization warning:', err.message);
@@ -83,33 +84,26 @@ export class EssentiaService {
             /* no fallback */
           }
 
-          // C. Danceability Extractor
+          // C. Danceability Extractor (normalized 0.0 - 1.0)
           try {
             const dance = essentia.Danceability(vectorSignal);
             if (dance && typeof dance.danceability === 'number') {
-              danceability = Number(dance.danceability.toFixed(2));
+              const val = dance.danceability > 1.0 ? dance.danceability / 10.0 : dance.danceability;
+              danceability = Number(Math.min(1.0, Math.max(0.1, val)).toFixed(2));
             }
           } catch (e: any) {
             /* no fallback */
           }
 
-          // D. Energy & RMS Power Extractor
+          // D. Energy & RMS Power Extractor (normalized 0.1 - 1.0)
           try {
-            const nrg = essentia.Energy(vectorSignal);
-            if (nrg && typeof nrg.energy === 'number') {
-              const normalizedEnergy = Math.min(1.0, Math.max(0.1, nrg.energy / 500.0));
-              energy = Number(normalizedEnergy.toFixed(2));
+            let sumSq = 0;
+            for (let i = 0; i < pcmSlice.length; i += 4) {
+              sumSq += pcmSlice[i] * pcmSlice[i];
             }
-          } catch (e: any) {
-            /* no fallback */
-          }
-
-          // E. Loudness Extractor (dB / LUFS)
-          try {
-            const loud = essentia.Loudness(vectorSignal);
-            if (loud && typeof loud.loudness === 'number') {
-              loudnessDb = Number((20 * Math.log10(loud.loudness || 0.001)).toFixed(1));
-            }
+            const rms = Math.sqrt(sumSq / (Math.floor(pcmSlice.length / 4) || 1));
+            energy = Number(Math.min(1.0, Math.max(0.1, rms * 4.5)).toFixed(2));
+            loudnessDb = Number((20 * Math.log10(Math.max(rms, 0.0001))).toFixed(1));
           } catch (e: any) {
             /* no fallback */
           }

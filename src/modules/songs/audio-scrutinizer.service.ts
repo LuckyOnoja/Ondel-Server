@@ -154,13 +154,25 @@ Return a valid JSON object matching EXACTLY this structure:
       console.log(`🔍 [Ondel Scrutinizer Engine] Starting Track Analysis for "${song.title}"...`);
       console.log(`================================================================================`);
 
+      // If audioBuffer was not passed in memory, fetch it from song.audioUrl if available
+      let targetBuffer = audioBuffer;
+      if (!targetBuffer && song.audioUrl) {
+        try {
+          console.log(`📥 [AudioScrutinizer] Fetching audio buffer from URL for "${song.title}"...`);
+          const response = await axios.get(song.audioUrl, { responseType: 'arraybuffer', timeout: 20000 });
+          targetBuffer = Buffer.from(response.data);
+        } catch (fetchErr: any) {
+          console.warn(`⚠️ [AudioScrutinizer] Could not fetch audio buffer from URL: ${fetchErr.message}`);
+        }
+      }
+
       // 1. Layer 0: Perform Node AudioDSP & Essentia.js MIR Analysis if buffer provided
       let essentiaResult: EssentiaAudioFeatures | undefined = undefined;
       let dspResult: DSPAnalysisResult | undefined = undefined;
 
-      if (audioBuffer) {
-        dspResult = await AudioDSPService.analyzeAudioBuffer(audioBuffer);
-        essentiaResult = await EssentiaService.analyzeAudioBuffer(audioBuffer, song.genre);
+      if (targetBuffer) {
+        dspResult = await AudioDSPService.analyzeAudioBuffer(targetBuffer);
+        essentiaResult = await EssentiaService.analyzeAudioBuffer(targetBuffer, song.genre);
       }
 
       // 2. Layer 1: DeepSeek AI A&R Engine Analysis
