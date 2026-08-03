@@ -64,12 +64,18 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
 
     const userEmail = String(email).toLowerCase().trim();
 
+    const challengeMapping: Record<string, string> = {
+      DONT_KNOW_AFTER_UPLOADING: 'DONT_KNOW_WHAT_TO_DO',
+      KNOWING_WHEN_TO_RELEASE: 'WHEN_TO_RELEASE',
+    };
+    const normalizedChallenge = challengeMapping[biggestChallenge] || biggestChallenge;
+
     const submission = await prisma.waitlistSubmission.create({
       data: {
         artistName: String(artistName),
         email: userEmail,
         urgency,
-        biggestChallenge,
+        biggestChallenge: normalizedChallenge as any,
         goldmineAnswer: String(goldmineAnswer),
         demoUrl: demoUrl ? String(demoUrl) : null,
         audioFileName: audioFileName ? String(audioFileName) : null,
