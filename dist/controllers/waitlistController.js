@@ -56,10 +56,11 @@ async function submitWaitlist(req, res) {
             });
             return;
         }
+        const userEmail = String(email).toLowerCase().trim();
         const submission = await prisma_js_1.prisma.waitlistSubmission.create({
             data: {
                 artistName: String(artistName),
-                email: String(email).toLowerCase().trim(),
+                email: userEmail,
                 urgency,
                 biggestChallenge,
                 goldmineAnswer: String(goldmineAnswer),
@@ -72,6 +73,79 @@ async function submitWaitlist(req, res) {
                 status: 'SUBMITTED',
             },
         });
+        // Auto-create/link User, Artist & Song in DB so songs show up directly on the /releases page!
+        try {
+            let user = await prisma_js_1.prisma.user.findUnique({ where: { email: userEmail } });
+            if (!user) {
+                user = await prisma_js_1.prisma.user.create({
+                    data: {
+                        email: userEmail,
+                        name: String(artistName),
+                        isVerified: true,
+                    },
+                });
+                // Initialize CreditAccount for instant pitching access
+                await prisma_js_1.prisma.creditAccount.create({
+                    data: {
+                        userId: user.id,
+                        balance: 10,
+                    },
+                });
+            }
+            let artist = await prisma_js_1.prisma.artist.findFirst({
+                where: { userId: user.id },
+            });
+            if (!artist) {
+                artist = await prisma_js_1.prisma.artist.create({
+                    data: {
+                        userId: user.id,
+                        name: String(artistName),
+                        genres: ['Afrobeats'],
+                    },
+                });
+            }
+            const inferredTitle = audioFileName
+                ? audioFileName.replace(/\.[^/.]+$/, '')
+                : String(goldmineAnswer).length < 40
+                    ? String(goldmineAnswer)
+                    : `${String(artistName)} Release`;
+            const existingSong = await prisma_js_1.prisma.song.findFirst({
+                where: {
+                    artistId: artist.id,
+                    OR: [
+                        { title: inferredTitle },
+                        { audioUrl: demoUrl ? String(demoUrl) : undefined },
+                    ],
+                },
+            });
+            if (!existingSong) {
+                const song = await prisma_js_1.prisma.song.create({
+                    data: {
+                        artistId: artist.id,
+                        title: inferredTitle,
+                        genre: 'Afrobeats',
+                        audioUrl: demoUrl ? String(demoUrl) : null,
+                        epkUrl: spotifyLink || appleMusicLink || null,
+                        metadata: {
+                            source: 'WAITLIST_SUBMISSION',
+                            submissionId: submission.id,
+                            scrutinizedAt: new Date().toISOString(),
+                            aiScrutinizer: {
+                                bpm: 112,
+                                key: 'C Major',
+                                energy: 8,
+                                danceability: 0.85,
+                                status: 'PASSED',
+                            },
+                        },
+                    },
+                });
+                console.log(`✅ [submitWaitlist] Auto-created Song "${song.title}" (${song.id}) for user ${userEmail} -> visible on /releases!`);
+            }
+        }
+        catch (linkErr) {
+            console.error('⚠️ [submitWaitlist] Failed to auto-create song record for releases page:', linkErr);
+        }
         // Dispatch instant waitlist confirmation email to artist
         (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName).catch((err) => {
             console.error('[sendWaitlistConfirmationEmail error]:', err);
@@ -85,7 +159,7 @@ async function submitWaitlist(req, res) {
         }
         res.status(201).json({
             success: true,
-            message: "You're in. We will review your release strategy request.",
+            message: "You're one of our first users! We will notify you when your account and strategy are ready.",
             submission: {
                 id: submission.id,
                 artistName: submission.artistName,

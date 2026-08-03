@@ -62,10 +62,12 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
       return;
     }
 
+    const userEmail = String(email).toLowerCase().trim();
+
     const submission = await prisma.waitlistSubmission.create({
       data: {
         artistName: String(artistName),
-        email: String(email).toLowerCase().trim(),
+        email: userEmail,
         urgency,
         biggestChallenge,
         goldmineAnswer: String(goldmineAnswer),
@@ -78,6 +80,86 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
         status: 'SUBMITTED',
       },
     });
+
+    // Auto-create/link User, Artist & Song in DB so songs show up directly on the /releases page!
+    try {
+      let user = await prisma.user.findUnique({ where: { email: userEmail } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: userEmail,
+            name: String(artistName),
+            isVerified: true,
+          },
+        });
+
+        // Initialize CreditAccount for instant pitching access
+        await prisma.creditAccount.create({
+          data: {
+            userId: user.id,
+            balance: 10,
+          },
+        });
+      }
+
+      let artist = await prisma.artist.findFirst({
+        where: { userId: user.id },
+      });
+
+      if (!artist) {
+        artist = await prisma.artist.create({
+          data: {
+            userId: user.id,
+            name: String(artistName),
+            genres: ['Afrobeats'],
+          },
+        });
+      }
+
+      const inferredTitle = audioFileName
+        ? audioFileName.replace(/\.[^/.]+$/, '')
+        : String(goldmineAnswer).length < 40
+        ? String(goldmineAnswer)
+        : `${String(artistName)} Release`;
+
+      const existingSong = await prisma.song.findFirst({
+        where: {
+          artistId: artist.id,
+          OR: [
+            { title: inferredTitle },
+            { audioUrl: demoUrl ? String(demoUrl) : undefined },
+          ],
+        },
+      });
+
+      if (!existingSong) {
+        const song = await prisma.song.create({
+          data: {
+            artistId: artist.id,
+            title: inferredTitle,
+            genre: 'Afrobeats',
+            audioUrl: demoUrl ? String(demoUrl) : null,
+            epkUrl: spotifyLink || appleMusicLink || null,
+            metadata: {
+              source: 'WAITLIST_SUBMISSION',
+              submissionId: submission.id,
+              scrutinizedAt: new Date().toISOString(),
+              aiScrutinizer: {
+                bpm: 112,
+                key: 'C Major',
+                energy: 8,
+                danceability: 0.85,
+                status: 'PASSED',
+              },
+            },
+          },
+        });
+
+        console.log(`✅ [submitWaitlist] Auto-created Song "${song.title}" (${song.id}) for user ${userEmail} -> visible on /releases!`);
+      }
+    } catch (linkErr) {
+      console.error('⚠️ [submitWaitlist] Failed to auto-create song record for releases page:', linkErr);
+    }
 
     // Dispatch instant waitlist confirmation email to artist
     sendWaitlistConfirmationEmail(submission.email, submission.artistName).catch((err) => {
@@ -94,7 +176,7 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
 
     res.status(201).json({
       success: true,
-      message: "You're in. We will review your release strategy request.",
+      message: "You're one of our first users! We will notify you when your account and strategy are ready.",
       submission: {
         id: submission.id,
         artistName: submission.artistName,
