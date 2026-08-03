@@ -80,12 +80,14 @@ export class WebhookController {
       // 3. Classify reply sentiment via AI (DeepSeek + Gemini Fallback)
       const sentiment = await WebhookController.classifyReplySentiment(subject, String(content));
 
-      // 4. Update CampaignTarget status
+      // 4. Update CampaignTarget status & save curator reply text
       await prisma.campaignTarget.update({
         where: { id: target.id },
         data: {
           status: sentiment.targetStatus,
           sentAt: target.sentAt || new Date(),
+          replyText: String(content).trim(),
+          repliedAt: new Date(),
         },
       });
 
@@ -98,7 +100,7 @@ export class WebhookController {
         console.log(`[Zoho Webhook] Contact ${target.leadId} unsubscribed and updated in database.`);
       }
 
-      console.log(`[Zoho Webhook] Updated target ${target.id} status to ${sentiment.targetStatus}`);
+      console.log(`[Zoho Webhook] Updated target ${target.id} status to ${sentiment.targetStatus} with reply text.`);
       res.status(200).json({ success: true, data: { targetId: target.id, status: sentiment.targetStatus } });
     } catch (error: any) {
       console.error('[Zoho Webhook Error]:', error.message);
@@ -138,18 +140,7 @@ export class WebhookController {
         }
       }
 
-      // Return candidate with domain match as best fallback
-      if (senderDomain && !['gmail.com', 'yahoo.com', 'outlook.com'].includes(senderDomain)) {
-        const domainTarget = activeTargets.find((t) =>
-          t.lead.contactPoints.some((cp) => cp.value.includes(senderDomain)) || (t.lead.sourceUrl && t.lead.sourceUrl.includes(senderDomain))
-        );
-        if (domainTarget) {
-          console.log(`[Reconciliation AI] Domain-level match for target ${domainTarget.id}`);
-          return domainTarget;
-        }
-      }
-
-      // Return candidate with song title match
+      // Return candidate with song title match (Strict match to prevent cross-song contamination)
       const songTarget = activeTargets.find((t) =>
         t.campaign?.song?.title && `${subject} ${content}`.toLowerCase().includes(t.campaign.song.title.toLowerCase())
       );
@@ -176,7 +167,16 @@ export class WebhookController {
       return { targetStatus: CampaignTargetStatus.ACCEPTED };
     }
 
-    if (lowerText.includes('rate sheet') || lowerText.includes('pricing') || lowerText.includes('$') || lowerText.includes('charge')) {
+    if (
+      lowerText.includes('rate sheet') ||
+      lowerText.includes('pricing') ||
+      lowerText.includes('$') ||
+      lowerText.includes('charge') ||
+      lowerText.includes('pay me') ||
+      lowerText.includes('pay') ||
+      lowerText.includes('fee') ||
+      lowerText.includes('how much')
+    ) {
       return { targetStatus: CampaignTargetStatus.INTERESTED };
     }
 
