@@ -33,7 +33,7 @@ class OutreachService {
         const trackingFooter = `<br><br><span style="display:none;color:transparent;font-size:0px;">Ref: ONDEL-TGT-${targetId}</span>`;
         const fullHtml = `${pitchBody}${trackingFooter}`;
         const fromAddress = `"${env_1.env.SMTP_FROM_NAME}" <${env_1.env.SMTP_USER}>`;
-        const replyToAddress = `promo+tgt_${targetId}@${env_1.env.SMTP_USER.split('@')[1] || 'ondel.io'}`;
+        const replyToAddress = env_1.env.SMTP_USER; // Valid direct email address so curator replies deliver cleanly without bouncing
         try {
             await this.transporter.sendMail({
                 from: fromAddress,
