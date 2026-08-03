@@ -153,11 +153,11 @@ export async function getStrategyByToken(req: Request, res: Response): Promise<v
   try {
     const tokenStr = String(req.params.token);
 
-    const submission = await (prisma.waitlistSubmission as any).findUnique({
+    const submission = await prisma.waitlistSubmission.findUnique({
       where: { shareToken: tokenStr },
       include: {
         strategy: true,
-        weeklyUpdates: {
+        weeklyOpportunities: {
           orderBy: { weekNumber: 'desc' },
         },
       },
@@ -173,7 +173,7 @@ export async function getStrategyByToken(req: Request, res: Response): Promise<v
       artistName: submission.artistName,
       status: submission.status,
       strategy: submission.strategy,
-      weeklyUpdates: submission.weeklyUpdates,
+      weeklyOpportunities: submission.weeklyOpportunities,
     });
   } catch (error: any) {
     console.error('[getStrategyByToken error]:', error);
@@ -206,12 +206,12 @@ export async function getAdminSubmissions(req: AuthRequest, res: Response): Prom
       ];
     }
 
-    const submissions = await (prisma.waitlistSubmission as any).findMany({
+    const submissions = await prisma.waitlistSubmission.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
         strategy: true,
-        _count: { select: { weeklyUpdates: true } },
+        _count: { select: { weeklyOpportunities: true, waitlistStepLogs: true } },
       },
     });
 
@@ -229,12 +229,12 @@ export async function getAdminSubmissionById(req: AuthRequest, res: Response): P
   try {
     const subId = String(req.params.id);
 
-    const submission = await (prisma.waitlistSubmission as any).findUnique({
+    const submission = await prisma.waitlistSubmission.findUnique({
       where: { id: subId },
       include: {
         strategy: true,
-        weeklyUpdates: true,
-        stepLogs: { orderBy: { stepNumber: 'asc' } },
+        weeklyOpportunities: { orderBy: { weekNumber: 'desc' } },
+        waitlistStepLogs: { orderBy: { stepNumber: 'asc' } },
       },
     });
 

@@ -144,7 +144,7 @@ async function getStrategyByToken(req, res) {
             where: { shareToken: tokenStr },
             include: {
                 strategy: true,
-                weeklyUpdates: {
+                weeklyOpportunities: {
                     orderBy: { weekNumber: 'desc' },
                 },
             },
@@ -158,7 +158,7 @@ async function getStrategyByToken(req, res) {
             artistName: submission.artistName,
             status: submission.status,
             strategy: submission.strategy,
-            weeklyUpdates: submission.weeklyUpdates,
+            weeklyOpportunities: submission.weeklyOpportunities,
         });
     }
     catch (error) {
@@ -191,7 +191,7 @@ async function getAdminSubmissions(req, res) {
             orderBy: { createdAt: 'desc' },
             include: {
                 strategy: true,
-                _count: { select: { weeklyUpdates: true } },
+                _count: { select: { weeklyOpportunities: true, waitlistStepLogs: true } },
             },
         });
         res.status(200).json({ success: true, count: submissions.length, submissions });
@@ -211,8 +211,8 @@ async function getAdminSubmissionById(req, res) {
             where: { id: subId },
             include: {
                 strategy: true,
-                weeklyUpdates: true,
-                stepLogs: { orderBy: { stepNumber: 'asc' } },
+                weeklyOpportunities: { orderBy: { weekNumber: 'desc' } },
+                waitlistStepLogs: { orderBy: { stepNumber: 'asc' } },
             },
         });
         if (!submission) {
