@@ -13,6 +13,7 @@ exports.saveAndDeliverStrategy = saveAndDeliverStrategy;
 exports.createWeeklyOpportunity = createWeeklyOpportunity;
 exports.getAnalyticsMetrics = getAnalyticsMetrics;
 exports.getMyStrategy = getMyStrategy;
+exports.checkStatus = checkStatus;
 const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
@@ -485,5 +486,35 @@ async function getMyStrategy(req, res) {
     catch (error) {
         console.error('[getMyStrategy error]:', error);
         res.status(500).json({ success: false, message: 'Server error retrieving strategy' });
+    }
+}
+/**
+ * Public/Auth: Check if an email or current user has submitted to the waitlist
+ */
+async function checkStatus(req, res) {
+    try {
+        let emailToCheck = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
+        if (!emailToCheck && req.user?.email) {
+            emailToCheck = String(req.user.email).toLowerCase().trim();
+        }
+        if (!emailToCheck) {
+            res.status(400).json({ success: false, message: 'Email query parameter required' });
+            return;
+        }
+        const submission = await prisma_js_1.prisma.waitlistSubmission.findFirst({
+            where: {
+                email: { equals: emailToCheck, mode: 'insensitive' },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        res.status(200).json({
+            success: true,
+            hasSubmitted: Boolean(submission),
+            submission: submission || null,
+        });
+    }
+    catch (error) {
+        console.error('[checkStatus error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to check waitlist status' });
     }
 }

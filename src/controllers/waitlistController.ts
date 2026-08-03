@@ -541,3 +541,38 @@ export async function getMyStrategy(req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({ success: false, message: 'Server error retrieving strategy' });
   }
 }
+
+/**
+ * Public/Auth: Check if an email or current user has submitted to the waitlist
+ */
+export async function checkStatus(req: Request, res: Response): Promise<void> {
+  try {
+    let emailToCheck = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
+
+    if (!emailToCheck && (req as any).user?.email) {
+      emailToCheck = String((req as any).user.email).toLowerCase().trim();
+    }
+
+    if (!emailToCheck) {
+      res.status(400).json({ success: false, message: 'Email query parameter required' });
+      return;
+    }
+
+    const submission = await prisma.waitlistSubmission.findFirst({
+      where: {
+        email: { equals: emailToCheck, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.status(200).json({
+      success: true,
+      hasSubmitted: Boolean(submission),
+      submission: submission || null,
+    });
+  } catch (error: any) {
+    console.error('[checkStatus error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to check waitlist status' });
+  }
+}
+
