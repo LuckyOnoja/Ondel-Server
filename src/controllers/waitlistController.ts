@@ -424,14 +424,14 @@ export async function getMyStrategy(req: AuthRequest, res: Response): Promise<vo
 
     const userEmail = String(req.user.email).toLowerCase().trim();
 
-    const submission = await (prisma.waitlistSubmission as any).findFirst({
+    const submission = await prisma.waitlistSubmission.findFirst({
       where: {
         email: { equals: userEmail, mode: 'insensitive' },
       },
       orderBy: { createdAt: 'desc' },
       include: {
         strategy: true,
-        weeklyUpdates: {
+        weeklyOpportunities: {
           orderBy: { weekNumber: 'desc' },
         },
       },
@@ -445,8 +445,8 @@ export async function getMyStrategy(req: AuthRequest, res: Response): Promise<vo
     res.status(200).json({
       success: true,
       submission,
-      strategy: submission.strategy,
-      weeklyUpdates: submission.weeklyUpdates,
+      strategy: (submission as any).strategy,
+      weeklyOpportunities: (submission as any).weeklyOpportunities,
     });
   } catch (error: any) {
     console.error('[getMyStrategy error]:', error);

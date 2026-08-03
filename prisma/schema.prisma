@@ -86,7 +86,7 @@ model WaitlistSubmission {
   shareToken           String                 @unique @default(uuid())
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
-  release_strategies   ReleaseStrategy?
+  strategy             ReleaseStrategy?
   waitlistStepLogs     WaitlistStepLog[]
   weeklyOpportunities  WeeklyOpportunity[]
 
@@ -107,7 +107,7 @@ model ReleaseStrategy {
   wouldPaySignal       Boolean            @default(false)
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
-  waitlist_submissions WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission           WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@map("release_strategies")
 }
@@ -304,7 +304,7 @@ model WaitlistStepLog {
   metadata             Json?
   createdAt            DateTime            @default(now())
   submissionId         String?
-  waitlist_submissions WaitlistSubmission? @relation(fields: [submissionId], references: [id])
+  submission           WaitlistSubmission? @relation(fields: [submissionId], references: [id])
 
   @@index([sessionId, stepNumber])
   @@map("waitlist_step_logs")
@@ -318,7 +318,7 @@ model WeeklyOpportunity {
   opportunities        Json
   sentAt               DateTime           @default(now())
   clickedAt            DateTime?
-  waitlist_submissions WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submission           WaitlistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@map("weekly_opportunities")
 }

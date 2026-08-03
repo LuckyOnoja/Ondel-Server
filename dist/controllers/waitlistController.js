@@ -387,7 +387,7 @@ async function getMyStrategy(req, res) {
             orderBy: { createdAt: 'desc' },
             include: {
                 strategy: true,
-                weeklyUpdates: {
+                weeklyOpportunities: {
                     orderBy: { weekNumber: 'desc' },
                 },
             },
@@ -400,7 +400,7 @@ async function getMyStrategy(req, res) {
             success: true,
             submission,
             strategy: submission.strategy,
-            weeklyUpdates: submission.weeklyUpdates,
+            weeklyOpportunities: submission.weeklyOpportunities,
         });
     }
     catch (error) {

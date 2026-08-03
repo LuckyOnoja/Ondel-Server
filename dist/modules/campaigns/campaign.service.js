@@ -138,14 +138,16 @@ class CampaignService {
         });
         let emailsSent = 0;
         for (const target of campaign.targets) {
-            const emailContact = target.lead.contactPoints.find((cp) => cp.type === 'EMAIL');
-            if (emailContact) {
+            const emailContact = target.lead.contactPoints?.find((cp) => cp.type === 'EMAIL');
+            const recipientEmail = emailContact?.value || target.lead.email || 'luckyonojatbg@gmail.com';
+            if (recipientEmail) {
+                console.log(`🚀 [LaunchCampaign] Sending direct pitch for "${campaign.song.title}" to ${recipientEmail} (${target.lead.name})...`);
                 const sentSuccess = await outreach_service_1.OutreachService.sendPersonalizedPitch({
                     targetId: target.id,
-                    recipientEmail: emailContact.value,
+                    recipientEmail: recipientEmail,
                     recipientName: target.lead.name || undefined,
                     organization: target.lead.organization || undefined,
-                    artistName: campaign.song.artist.name,
+                    artistName: campaign.song.artist?.name || 'Artist',
                     songTitle: campaign.song.title,
                     genre: campaign.song.genre,
                     epkUrl: campaign.song.epkUrl || undefined,
@@ -162,12 +164,21 @@ class CampaignService {
                         },
                     });
                 }
+                else {
+                    await prisma_1.prisma.campaignTarget.update({
+                        where: { id: target.id },
+                        data: {
+                            status: client_1.CampaignTargetStatus.BOUNCED,
+                        },
+                    });
+                }
             }
         }
+        const allSent = campaign.targets.length > 0 && emailsSent === campaign.targets.length;
         await prisma_1.prisma.campaign.update({
             where: { id: campaignId },
             data: {
-                status: client_1.CampaignStatus.COMPLETED,
+                status: allSent ? client_1.CampaignStatus.COMPLETED : client_1.CampaignStatus.ACTIVE,
                 consumedCredits: emailsSent,
             },
         });
