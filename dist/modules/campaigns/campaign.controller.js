@@ -36,7 +36,7 @@ class CampaignController {
     }
     static async getUserCampaigns(req, res) {
         try {
-            const userId = String(req.params.userId || req.query.userId);
+            const userId = String(req.user?.userId || req.user?.id || req.params.userId || req.query.userId || '');
             if (!userId || userId === 'undefined') {
                 res.status(400).json({ success: false, error: 'userId is required' });
                 return;

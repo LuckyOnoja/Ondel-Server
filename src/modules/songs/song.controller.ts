@@ -43,7 +43,7 @@ export class SongController {
 
   static async getUserSongs(req: Request, res: Response): Promise<void> {
     try {
-      const userId = String(req.query.userId || req.params.userId);
+      const userId = String((req as any).user?.userId || (req as any).user?.id || req.query.userId || req.params.userId || '');
       if (!userId || userId === 'undefined') {
         res.status(400).json({ success: false, error: 'userId is required' });
         return;

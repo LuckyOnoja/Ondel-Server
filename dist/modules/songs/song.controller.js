@@ -44,7 +44,7 @@ class SongController {
     }
     static async getUserSongs(req, res) {
         try {
-            const userId = String(req.query.userId || req.params.userId);
+            const userId = String(req.user?.userId || req.user?.id || req.query.userId || req.params.userId || '');
             if (!userId || userId === 'undefined') {
                 res.status(400).json({ success: false, error: 'userId is required' });
                 return;
