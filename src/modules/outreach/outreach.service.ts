@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { env } from '../../config/env';
 import { DeepSeekGeminiAIProvider } from '../../providers/ai/deepseek-gemini.provider';
+import { buildOndelEmailTemplate } from '../../utils/email-template';
 
 export interface SendOutreachInput {
   targetId: string;
@@ -41,8 +42,15 @@ export class OutreachService {
       audioUrl: audioUrl || 'https://ondel.io',
     });
 
-    const trackingFooter = `<br><br><span style="display:none;color:transparent;font-size:0px;">Ref: ONDEL-TGT-${targetId}</span>`;
-    const fullHtml = `${pitchBody}${trackingFooter}`;
+    const trackingFooter = `<span style="display:none;color:transparent;font-size:0px;">Ref: ONDEL-TGT-${targetId}</span>`;
+    const innerContent = `${pitchBody}${trackingFooter}`;
+
+    const fullHtml = buildOndelEmailTemplate({
+      badgeText: 'MUSIC SUBMISSION',
+      title: `Submission: "${songTitle}" by ${artistName}`,
+      bodyHtml: innerContent,
+      footerText: 'Direct music promotion outreach via Ondel Platform.',
+    });
 
     const fromAddress = `"${env.SMTP_FROM_NAME}" <${env.SMTP_USER}>`;
     const replyToAddress = env.SMTP_USER; // Valid direct email address so curator replies deliver cleanly without bouncing

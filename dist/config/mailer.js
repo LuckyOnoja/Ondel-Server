@@ -9,6 +9,7 @@ exports.sendStrategyDeliveredEmail = sendStrategyDeliveredEmail;
 exports.sendWeeklyOpportunityEmail = sendWeeklyOpportunityEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const env_js_1 = require("./env.js");
+const email_template_js_1 = require("../utils/email-template.js");
 const transporter = nodemailer_1.default.createTransport({
     service: 'gmail',
     auth: {
@@ -27,28 +28,29 @@ async function sendOtpEmail(toEmail, otp) {
     `);
         return true;
     }
+    const html = (0, email_template_js_1.buildOndelEmailTemplate)({
+        badgeText: 'SECURITY VERIFICATION',
+        title: 'Verification Code',
+        bodyHtml: `
+      <p style="margin: 0 0 16px 0;">Use the 6-digit verification code below to authenticate into your Ondel workspace. This code will expire in 10 minutes.</p>
+      <div style="background-color: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 6px; padding: 24px; text-align: center; margin: 24px 0;" class="email-badge">
+        <span style="font-size: 38px; font-weight: 800; letter-spacing: 10px; font-family: monospace;" class="email-brand-text">${otp}</span>
+      </div>
+      <p style="margin: 0; font-size: 13px;" class="email-muted">If you did not request this verification code, please ignore this message.</p>
+    `,
+    });
     try {
         await transporter.sendMail({
             from: `"Ondel Music" <${env_js_1.env.EMAIL_USER}>`,
             to: toEmail,
             subject: `Your Ondel Verification Code: ${otp}`,
-            html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0c0d0e; color: #f4f4f5; border-radius: 16px;">
-          <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 8px;">Welcome to Ondel</h2>
-          <p style="color: #a1a1aa; font-size: 15px; margin-bottom: 24px;">Use the verification code below to complete your authentication. This code will expire in 10 minutes.</p>
-          <div style="background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
-            <span style="font-size: 36px; font-weight: 700; letter-spacing: 6px; color: #3b82f6;">${otp}</span>
-          </div>
-          <p style="color: #71717a; font-size: 13px;">If you did not request this email, please ignore it.</p>
-        </div>
-      `,
+            html,
         });
         console.log(`✅ [Mailer] Sent OTP email successfully to ${toEmail}`);
         return true;
     }
     catch (error) {
         console.error(`❌ [Mailer Error] Failed to send email to ${toEmail}:`, error);
-        // Fallback log in dev
         console.log(`🔑 Fallback OTP for ${toEmail}: ${otp}`);
         return false;
     }
@@ -64,32 +66,27 @@ async function sendWaitlistConfirmationEmail(toEmail, artistName) {
     `);
         return true;
     }
+    const html = (0, email_template_js_1.buildOndelEmailTemplate)({
+        badgeText: 'SUBMISSION CONFIRMED',
+        title: `Welcome to Ondel, ${artistName}`,
+        bodyHtml: `
+      <p style="margin: 0 0 16px 0;">We received your music submission and release details. Ondel AI is building your custom 5-pillar launch strategy:</p>
+      <ul style="line-height: 1.9; padding-left: 20px; margin: 0 0 20px 0;">
+        <li>Personalised Release Roadmap</li>
+        <li>30-Day Content Calendar</li>
+        <li>Playlist Pitching Targets</li>
+        <li>Creator Opportunities</li>
+        <li>Execution Checklist</li>
+      </ul>
+      <p style="margin: 0;">You will receive an email as soon as your strategy workspace is generated.</p>
+    `,
+    });
     try {
         await transporter.sendMail({
             from: `"Ondel Team" <${env_js_1.env.EMAIL_USER}>`,
             to: toEmail,
-            subject: `You're on the Ondel Waitlist, ${artistName}! 🎵`,
-            html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #0c0d0e; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
-          <div style="margin-bottom: 20px;">
-            <span style="font-size: 12px; font-weight: 700; color: #10b981; text-transform: uppercase; letter-spacing: 1px;">Submission Confirmed</span>
-          </div>
-          <h2 style="font-size: 24px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Welcome to the Ondel Waitlist, ${artistName}!</h2>
-          <p style="color: #a1a1aa; font-size: 15px; line-height: 1.6; margin-bottom: 20px;">
-            We received your release details and audio submission. Our team and Ondie AI are reviewing your submission and building your 5-pillar launch strategy:
-          </p>
-          <ul style="color: #d4d4d8; font-size: 14px; line-height: 1.8; padding-left: 20px; margin-bottom: 24px;">
-            <li>🎯 Personalised Release Roadmap</li>
-            <li>📅 30-Day Content Calendar</li>
-            <li>🎧 Playlist Pitching Targets</li>
-            <li>🤝 Creator Opportunities</li>
-            <li>✅ Execution Checklist</li>
-          </ul>
-          <p style="color: #71717a; font-size: 13px; line-height: 1.5;">
-            You will receive a notification email as soon as your strategy workspace is ready.
-          </p>
-        </div>
-      `,
+            subject: `You're on the Ondel Waitlist, ${artistName}!`,
+            html,
         });
         console.log(`✅ [Mailer] Sent Waitlist Confirmation email successfully to ${toEmail}`);
         return true;
@@ -111,30 +108,22 @@ async function sendStrategyDeliveredEmail(toEmail, artistName, shareToken) {
     `);
         return true;
     }
+    const html = (0, email_template_js_1.buildOndelEmailTemplate)({
+        badgeText: 'STRATEGY READY',
+        title: `Release Strategy Ready for ${artistName}`,
+        bodyHtml: `
+      <p style="margin: 0 0 16px 0;">Ondel AI has completed analyzing your release details and built your custom 5-pillar launch plan.</p>
+      <p style="margin: 0;">Access your strategy roadmap, content calendar, playlist targets, and weekly checklist inside your release workspace.</p>
+    `,
+        ctaText: 'Access Your Release Strategy',
+        ctaUrl: strategyUrl,
+    });
     try {
         await transporter.sendMail({
             from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
             to: toEmail,
-            subject: `Your Ondel Personalised Release Strategy is Ready 🚀`,
-            html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px; background: #09090b; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
-          <div style="margin-bottom: 20px;">
-            <span style="font-size: 12px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 1px;">Ondie AI Release Manager</span>
-          </div>
-          <h2 style="font-size: 26px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Your Personalised Strategy for ${artistName}</h2>
-          <p style="color: #a1a1aa; font-size: 15px; leading-height: 1.6; margin-bottom: 24px;">
-            We have reviewed your release details and built your custom 5-pillar launch plan (Release Roadmap, 30-Day Content Calendar, Playlist Pitching Targets, Creator Opportunities, and Checklist).
-          </p>
-          <div style="text-align: center; margin-bottom: 28px;">
-            <a href="${strategyUrl}" style="display: inline-block; background: linear-gradient(to right, #f59e0b, #d97706); color: #09090b; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
-              View Your Personalised Strategy →
-            </a>
-          </div>
-          <p style="color: #71717a; font-size: 13px; line-height: 1.5;">
-            We will continue to analyze your release performance and send you new opportunities week after week.
-          </p>
-        </div>
-      `,
+            subject: `Your Ondel Personalised Release Strategy is Ready`,
+            html,
         });
         console.log(`✅ [Mailer] Sent Strategy Delivered email successfully to ${toEmail}`);
         return true;
@@ -157,30 +146,22 @@ async function sendWeeklyOpportunityEmail(toEmail, artistName, updateTitle, shar
     `);
         return true;
     }
+    const html = (0, email_template_js_1.buildOndelEmailTemplate)({
+        badgeText: 'WEEKLY OPPORTUNITIES',
+        title: `New Opportunities for ${artistName}`,
+        bodyHtml: `
+      <p style="margin: 0 0 12px 0; font-weight: 700;">${updateTitle}</p>
+      <p style="margin: 0;">New playlist pitching targets and creator collaboration concepts have been added to your release workspace.</p>
+    `,
+        ctaText: 'View New Opportunities',
+        ctaUrl: strategyUrl,
+    });
     try {
         await transporter.sendMail({
             from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
             to: toEmail,
-            subject: `Ondie Update: ${updateTitle}`,
-            html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 540px; margin: 0 auto; padding: 32px; background: #09090b; color: #f4f4f5; border-radius: 16px; border: 1px solid #27272a;">
-          <div style="margin-bottom: 20px;">
-            <span style="font-size: 12px; font-weight: 700; color: #a855f7; text-transform: uppercase; letter-spacing: 1px;">Weekly Opportunity Update</span>
-          </div>
-          <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 12px; color: #ffffff;">Ondie found new opportunities for your release</h2>
-          <p style="color: #e4e4e7; font-size: 15px; font-weight: 600; margin-bottom: 16px;">
-            ${updateTitle}
-          </p>
-          <p style="color: #a1a1aa; font-size: 14px; margin-bottom: 24px;">
-            New playlist pitching targets and viral content concepts have been added directly to your release workspace.
-          </p>
-          <div style="text-align: center; margin-bottom: 24px;">
-            <a href="${strategyUrl}" style="display: inline-block; background: #a855f7; color: #ffffff; font-weight: 700; font-size: 14px; padding: 12px 24px; border-radius: 10px; text-decoration: none;">
-              Open Release Workspace →
-            </a>
-          </div>
-        </div>
-      `,
+            subject: `Ondel Update: ${updateTitle}`,
+            html,
         });
         console.log(`✅ [Mailer] Sent Weekly Opportunity email to ${toEmail}`);
         return true;
