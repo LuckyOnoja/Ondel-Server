@@ -9,8 +9,7 @@ exports.renameProject = renameProject;
 const project_service_js_1 = require("./project.service.js");
 async function getProjects(req, res) {
     try {
-        const rawUser = req.query.user || req.query.email;
-        const userIdentifier = typeof rawUser === 'string' ? rawUser : 'default_user';
+        const userIdentifier = req.user?.email || 'default_user';
         const projects = await project_service_js_1.projectService.getUserProjects(userIdentifier);
         res.status(200).json({ success: true, projects });
     }
@@ -21,8 +20,8 @@ async function getProjects(req, res) {
 }
 async function createProject(req, res) {
     try {
-        const { name, gradient, initialSongTitle, audioFileName, audioUrl, user } = req.body;
-        const userIdentifier = typeof user === 'string' ? user : 'default_user';
+        const { name, gradient, initialSongTitle, audioFileName, audioUrl } = req.body;
+        const userIdentifier = req.user?.email || 'default_user';
         if (!name || typeof name !== 'string') {
             res.status(400).json({ success: false, message: 'Project name is required' });
             return;
@@ -38,8 +37,8 @@ async function createProject(req, res) {
 async function addSongToProject(req, res) {
     try {
         const projectId = String(req.params.id);
-        const { title, artistName, audioUrl, audioFileName, status, releaseDate, user } = req.body;
-        const userIdentifier = typeof user === 'string' ? user : 'default_user';
+        const { title, artistName, audioUrl, audioFileName, status, releaseDate } = req.body;
+        const userIdentifier = req.user?.email || 'default_user';
         if (!title) {
             res.status(400).json({ success: false, message: 'Song title is required' });
             return;
@@ -62,8 +61,8 @@ async function addSongToProject(req, res) {
 async function addVaultItemToProject(req, res) {
     try {
         const projectId = String(req.params.id);
-        const { name, type, size, uploadedAt, fileUrl, user } = req.body;
-        const userIdentifier = typeof user === 'string' ? user : 'default_user';
+        const { name, type, size, uploadedAt, fileUrl } = req.body;
+        const userIdentifier = req.user?.email || 'default_user';
         if (!name || !type) {
             res.status(400).json({ success: false, message: 'Vault item name and type are required' });
             return;
@@ -85,8 +84,8 @@ async function addVaultItemToProject(req, res) {
 async function addCalendarEventToProject(req, res) {
     try {
         const projectId = String(req.params.id);
-        const { title, date, category, songTitle, user } = req.body;
-        const userIdentifier = typeof user === 'string' ? user : 'default_user';
+        const { title, date, category, songTitle } = req.body;
+        const userIdentifier = req.user?.email || 'default_user';
         if (!title || !date) {
             res.status(400).json({ success: false, message: 'Event title and date are required' });
             return;
@@ -107,8 +106,8 @@ async function addCalendarEventToProject(req, res) {
 async function renameProject(req, res) {
     try {
         const projectId = String(req.params.id);
-        const { name, user } = req.body;
-        const userIdentifier = typeof user === 'string' ? user : 'default_user';
+        const { name } = req.body;
+        const userIdentifier = req.user?.email || 'default_user';
         if (!name || typeof name !== 'string') {
             res.status(400).json({ success: false, message: 'Project name is required' });
             return;

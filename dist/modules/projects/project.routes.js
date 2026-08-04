@@ -2,7 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const project_controller_js_1 = require("./project.controller.js");
+const authMiddleware_js_1 = require("../../middleware/authMiddleware.js");
 const router = (0, express_1.Router)();
+// Require valid auth token for all project operations
+router.use(authMiddleware_js_1.requireAuth);
 router.get('/', project_controller_js_1.getProjects);
 router.post('/', project_controller_js_1.createProject);
 router.patch('/:id', project_controller_js_1.renameProject);

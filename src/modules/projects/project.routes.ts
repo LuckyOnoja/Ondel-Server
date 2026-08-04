@@ -7,8 +7,12 @@ import {
   addCalendarEventToProject,
   renameProject,
 } from './project.controller.js'
+import { requireAuth } from '../../middleware/authMiddleware.js'
 
 const router = Router()
+
+// Require valid auth token for all project operations
+router.use(requireAuth)
 
 router.get('/', getProjects)
 router.post('/', createProject)
