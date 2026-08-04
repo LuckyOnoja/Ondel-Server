@@ -33,15 +33,15 @@ async function sendOtpEmail(toEmail, otp) {
         title: 'Verify Your Email',
         subtitle: 'Registration Verification Code',
         bodyHtml: `
-      <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6;">
+      <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.6; color: #27272a;">
         Thank you for registering on <strong>Ondel</strong>. Please enter the 6-digit verification code below to verify your email address and activate your account:
       </p>
       
-      <div class="email-otp-box" style="border-radius: 8px; padding: 24px 16px; text-align: center; margin: 24px 0; overflow-x: auto;">
-        <span class="email-otp-text" style="font-size: 28px; font-weight: 800; letter-spacing: 6px; font-family: 'SF Mono', Consolas, Monaco, monospace; display: inline-block; white-space: nowrap;">${formattedOtp}</span>
+      <div class="email-otp-box" style="background-color: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 8px; padding: 24px 16px; text-align: center; margin: 24px 0; overflow-x: auto;">
+        <span class="email-otp-text" style="font-size: 28px; font-weight: 800; letter-spacing: 6px; font-family: 'SF Mono', Consolas, Monaco, monospace; color: #09090b; display: inline-block; white-space: nowrap;">${formattedOtp}</span>
       </div>
 
-      <p class="email-muted" style="margin: 0; font-size: 13px; line-height: 1.5;">
+      <p class="email-muted" style="margin: 0; font-size: 13px; line-height: 1.5; color: #71717a;">
         This verification code will expire in 10 minutes. If you did not attempt to register on Ondel, please disregard this message.
       </p>
     `,

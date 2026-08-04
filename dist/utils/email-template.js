@@ -5,13 +5,15 @@ exports.buildOndelEmailTemplate = buildOndelEmailTemplate;
  * Builds Ondel's Master Email Template
  *
  * Features:
- * - Universal Light & Dark Mode adaptation for iOS Mail, Gmail, Outlook & Apple Mail
- * - Hosted CDN PNG Logo with capital "Ondel" wordmark
- * - Responsive single-line OTP formatting
+ * - 100% Inlined styles for first-time senders (Gmail, Outlook, iOS Mail)
+ * - Base64 Data URI PNG logo (Renders instantly without waiting for "Show images")
+ * - Single-line responsive OTP digits
+ * - Universal Light & Dark mode media queries
  */
 function buildOndelEmailTemplate(options) {
     const { badgeText, subtitle, title, bodyHtml, ctaText, ctaUrl, footerText = 'If you did not request this email, please disregard this message.', } = options;
-    const logoUrl = 'https://res.cloudinary.com/dd36lgq0r/image/upload/f_png,w_120,h_120/v1785779528/ondel_songs/1785779527438-ondel_logo_svg.png';
+    // Base64 Data URI PNG logo so Gmail never blocks it as an external remote image
+    const logoDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAMAAAAOusbgAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAB3RJTUUH6ggDETUTYqU8RAAAAMlQTFRFAAAADAwMDw8PFBQUEhISDw8PEREREBAQEBAQEREREBAQEhISEBAQEhISEREREBAQEREREhISERERERERERERERERGBgYICAgIiIiJiYmLi4uLy8vMzMzOjo6Pj4+QEBAQkJCQ0NDSUlJTExMTU1NU1NTW1tbXFxcZ2dnampqa2trbm5ucXFxcnJydXV1iIiIkZGRkpKSl5eXqamprq6uvb29w8PDxcXFx8fHy8vL0dHR0tLS2NjY3t7e5OTk6Ojo7u7u+Pj4////AdmrBwAAABV0Uk5TABUhJisyPEBdeH+Qq62yutDa7fD8ZfoXhwAAAAFiS0dEQhDXPfQAAAMQSURBVGje7Ztrd9MwDIbdrdu63rPW3O+4QBhgrgLGZcP//0eRtuvqJk0s2YkF5+T9qlhPFDu27CMLUdRBbzBJZnNZg+azZDLoHQiEDvtTWbum/UMH9mQkG9LopALbHcoGNeyWcU9lwzrdi+2MZeMad4rco0RGUHKU5x6fySg6O87FG4mbkXdi7iQymhK7n8cyosYR/6OSv6orI2szkwxjg4fX87OMrvW8PYoPHq3WQcmg5SrZ5wD3M/CUAzzN8hzJogPR4wH3xIAHPBATHvBE4NelR6/SNF2UGB++yIzn6i56jRIz5JMPvpiVLtN91vOLtfXzU6S7mUDm7Xd+mY32kN/92Ri/PkNm+gL5hh9vuOayYLz9Y2v9gHSIBf/eujaFfn5pGb/XDLZcF791altbcAtuwS24BbfgFtyCo4BfW8armDnXwjL+rBlcmWXe+7a1vq8ZXJ1Xv7kxXjwOBisAozVyJ/H2OuZPz+32YLVHg/Xak0bune4vMmP65NYWW2iPA+vNtwO/3aBxtRcObsU7V8lqr0hgoM8IZb89kMD2fKHoXOWeyv5lsA7qYiIY6gODNxj+IzB4g3UYGDFEEGCPYc0F1v7gnR8RgsC0KXNneJiQL21kAFjV/6VLwcr4h2xCwLjW7oANOQMB75BxryxQCwxlYOtAcC5k7cc1PlnmrgflxfXIMvMhI8kGGXAVOBcyqpsBG3DlTiLnxR1z7lUrB4Yg+HGNMG1qAtM8EZ8WlC6rcqYKz0LIbtEYHLqIdc12gjZcVpFoVdxXFqXC9sfa7JXWWmuelVIaSp4I3ZiXkF1yTrFCNkJ2T+1CNkFGLCmYMxBF5WKmddzhC1CwgFpOkKc+hM+NzBmwx0261nAJYCQanxXiwQg0JRmlgKvRQNvA08BLNuzvWurOjgxesrW9KgCAx/GMFP5FxdkKobwbz9HlGDVrJhIecMJXcsNWZMRWVsVWSMZWOsdXLMhWHslWEMpXAstW9MtX5sxW2M1Xys5XvM92XYHvggbflRS+Szh8144YL1rxXS1jvEwX7/rgXxPQzwOSt/z6AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTAzVDE3OjUzOjE5KzAwOjAwfSogJwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0wM1QxNzo1MzoxOSswMDowMAx3mJsAAAAASUVORK5CYII=';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,58 +37,58 @@ function buildOndelEmailTemplate(options) {
       -webkit-font-smoothing: antialiased;
     }
     .email-wrapper {
-      background-color: #f4f4f5;
+      background-color: #f4f4f5 !important;
       padding: 32px 12px;
     }
     .email-card {
-      background-color: #ffffff;
-      border: 1px solid #e4e4e7;
-      border-radius: 8px;
-      max-width: 520px;
-      margin: 0 auto;
-      overflow: hidden;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+      background-color: #ffffff !important;
+      border: 1px solid #e4e4e7 !important;
+      border-radius: 8px !important;
+      max-width: 520px !important;
+      margin: 0 auto !important;
+      overflow: hidden !important;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05) !important;
     }
     .email-top-accent {
-      height: 4px;
-      background-color: #09090b;
+      height: 4px !important;
+      background-color: #09090b !important;
     }
     .email-header {
       padding: 36px 36px 20px 36px;
     }
     .email-brand-text {
-      color: #09090b;
+      color: #09090b !important;
     }
     .email-body {
       padding: 0 36px 36px 36px;
-      color: #09090b;
+      color: #09090b !important;
     }
     .email-title {
-      color: #09090b;
+      color: #09090b !important;
     }
     .email-subtitle {
-      color: #71717a;
+      color: #71717a !important;
     }
     .email-text {
-      color: #27272a;
+      color: #27272a !important;
     }
     .email-muted {
-      color: #71717a;
+      color: #71717a !important;
     }
     .email-otp-box {
-      background-color: #f4f4f5;
-      border: 1px solid #e4e4e7;
+      background-color: #f4f4f5 !important;
+      border: 1px solid #e4e4e7 !important;
     }
     .email-otp-text {
-      color: #09090b;
+      color: #09090b !important;
     }
     .email-divider {
-      border-bottom: 1px solid #e4e4e7;
+      border-bottom: 1px solid #e4e4e7 !important;
     }
     .email-button {
-      background-color: #09090b;
+      background-color: #09090b !important;
       color: #ffffff !important;
-      border-radius: 6px;
+      border-radius: 6px !important;
     }
 
     /* Dark Mode Overrides for iOS Mail, Apple Mail, Outlook */
@@ -148,45 +150,45 @@ function buildOndelEmailTemplate(options) {
   </style>
 </head>
 <body>
-  <div class="email-wrapper">
-    <div class="email-card">
+  <div class="email-wrapper" style="background-color: #f4f4f5; padding: 32px 12px;">
+    <div class="email-card" style="background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px; max-width: 520px; margin: 0 auto; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
       
-      <!-- Top Accent Bar -->
-      <div class="email-top-accent"></div>
+      <!-- Top Accent Bar (Inlined) -->
+      <div class="email-top-accent" style="height: 4px; background-color: #09090b; width: 100%;"></div>
 
-      <!-- Header with Logo Image and Capitalized Brand Name -->
-      <div class="email-header">
-        <table border="0" cellpadding="0" cellspacing="0">
+      <!-- Header with Inlined Base64 PNG Logo Image -->
+      <div class="email-header" style="padding: 36px 36px 20px 36px;">
+        <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
           <tr>
             <td style="padding-right: 12px; vertical-align: middle;">
-              <img src="${logoUrl}" width="34" height="34" alt="Ondel Logo" style="display: block; border: 0; outline: none;" />
+              <img src="${logoDataUri}" width="34" height="34" alt="" style="display: block; width: 34px; height: 34px; border: 0; outline: none; text-decoration: none;" />
             </td>
             <td style="vertical-align: middle;">
-              <span class="email-brand-text" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em;">Ondel</span>
+              <span class="email-brand-text" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: #09090b; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">Ondel</span>
             </td>
           </tr>
         </table>
       </div>
 
       <!-- Main Body Content -->
-      <div class="email-body">
+      <div class="email-body" style="padding: 0 36px 36px 36px; color: #09090b;">
         
         <!-- Main Title -->
-        <h1 class="email-title" style="font-size: 26px; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 4px 0; line-height: 1.25;">
+        <h1 class="email-title" style="font-size: 26px; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 4px 0; line-height: 1.25; color: #09090b;">
           ${title}
         </h1>
 
         <!-- Subtitle (Optional) -->
         ${subtitle
         ? `
-        <p class="email-subtitle" style="font-size: 14px; font-weight: 500; margin: 0 0 24px 0;">
+        <p class="email-subtitle" style="font-size: 14px; font-weight: 500; margin: 0 0 24px 0; color: #71717a;">
           ${subtitle}
         </p>
         `
         : '<div style="height: 20px;"></div>'}
 
         <!-- Text Content / Code Box -->
-        <div class="email-text" style="font-size: 15px; line-height: 1.65; margin-bottom: 28px;">
+        <div class="email-text" style="font-size: 15px; line-height: 1.65; margin-bottom: 28px; color: #27272a;">
           ${bodyHtml}
         </div>
 
@@ -194,7 +196,7 @@ function buildOndelEmailTemplate(options) {
         ${ctaText && ctaUrl
         ? `
         <div style="margin: 28px 0 32px 0;">
-          <a href="${ctaUrl}" class="email-button" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 700; text-decoration: none; letter-spacing: -0.01em;">
+          <a href="${ctaUrl}" class="email-button" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 700; text-decoration: none; letter-spacing: -0.01em; background-color: #09090b; color: #ffffff; border-radius: 6px;">
             ${ctaText} →
           </a>
         </div>
@@ -202,14 +204,14 @@ function buildOndelEmailTemplate(options) {
         : ''}
 
         <!-- Footer Sign-off -->
-        <div style="padding-top: 24px; margin-top: 32px;" class="email-divider">
-          <p class="email-text" style="font-size: 14px; margin: 0 0 4px 0;">
+        <div class="email-divider" style="padding-top: 24px; margin-top: 32px; border-top: 1px solid #e4e4e7;">
+          <p class="email-text" style="font-size: 14px; margin: 0 0 4px 0; color: #27272a;">
             Thanks,
           </p>
-          <p class="email-title" style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0;">
+          <p class="email-title" style="font-size: 14px; font-weight: 700; margin: 0 0 16px 0; color: #09090b;">
             The Ondel Team
           </p>
-          <p class="email-muted" style="font-size: 12px; margin: 0; line-height: 1.5;">
+          <p class="email-muted" style="font-size: 12px; margin: 0; line-height: 1.5; color: #71717a;">
             ${footerText}
           </p>
         </div>
