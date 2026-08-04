@@ -4,6 +4,7 @@ import { prisma } from '../config/prisma.js';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { sendWaitlistConfirmationEmail, sendStrategyDeliveredEmail, sendWeeklyOpportunityEmail } from '../config/mailer.js';
 import { isCloudinaryConfigured, uploadAudioToCloudinary } from '../config/cloudinary.js';
+import { projectService } from '../modules/projects/project.service.js';
 
 /**
  * Public: Log step progression in the waitlist funnel
@@ -41,6 +42,7 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
   try {
     const {
       artistName,
+      projectName = 'Untitled Project',
       email,
       urgency,
       biggestChallenge,
@@ -87,6 +89,12 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
       },
     });
 
+    const inferredTitle = audioFileName
+      ? String(audioFileName).replace(/\.[^/.]+$/, '')
+      : String(goldmineAnswer).length < 40
+      ? String(goldmineAnswer)
+      : `${String(artistName)} Release`;
+
     // Auto-create/link User, Artist & Song in DB so songs show up directly on the /releases page!
     try {
       let user = await prisma.user.findUnique({ where: { email: userEmail } });
@@ -121,12 +129,6 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
           },
         });
       }
-
-      const inferredTitle = audioFileName
-        ? audioFileName.replace(/\.[^/.]+$/, '')
-        : String(goldmineAnswer).length < 40
-        ? String(goldmineAnswer)
-        : `${String(artistName)} Release`;
 
       const existingSong = await prisma.song.findFirst({
         where: {
@@ -180,14 +182,31 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
       });
     }
 
+    // Auto-create backend Project folder for the artist's workspace
+    let createdProject = null;
+    try {
+      createdProject = await projectService.createProject(
+        userEmail,
+        projectName ? String(projectName).trim() : '',
+        undefined,
+        inferredTitle,
+        audioFileName ? String(audioFileName) : undefined,
+        demoUrl ? String(demoUrl) : undefined
+      );
+    } catch (projErr) {
+      console.error('⚠️ [submitWaitlist] Failed to auto-create project:', projErr);
+    }
+
     res.status(201).json({
       success: true,
-      message: "You're one of our first users! We will notify you when your account and strategy are ready.",
+      message: "Project folder created & waitlist submitted successfully!",
       submission: {
         id: submission.id,
         artistName: submission.artistName,
+        projectName: String(projectName || 'Untitled Project'),
         shareToken: submission.shareToken,
       },
+      project: createdProject,
     });
   } catch (error: any) {
     console.error('[submitWaitlist error]:', error);

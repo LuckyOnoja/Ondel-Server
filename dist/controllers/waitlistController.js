@@ -18,6 +18,7 @@ const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
 const cloudinary_js_1 = require("../config/cloudinary.js");
+const project_service_js_1 = require("../modules/projects/project.service.js");
 /**
  * Public: Log step progression in the waitlist funnel
  */
@@ -49,7 +50,7 @@ async function logStep(req, res) {
  */
 async function submitWaitlist(req, res) {
     try {
-        const { artistName, email, urgency, biggestChallenge, goldmineAnswer, demoUrl, audioFileName, spotifyLink, appleMusicLink, strategyRequested = true, headlineVariant = 'A', sessionId, } = req.body;
+        const { artistName, projectName = 'Untitled Project', email, urgency, biggestChallenge, goldmineAnswer, demoUrl, audioFileName, spotifyLink, appleMusicLink, strategyRequested = true, headlineVariant = 'A', sessionId, } = req.body;
         if (!artistName || !email || !urgency || !biggestChallenge || !goldmineAnswer) {
             res.status(400).json({
                 success: false,
@@ -79,6 +80,11 @@ async function submitWaitlist(req, res) {
                 status: 'SUBMITTED',
             },
         });
+        const inferredTitle = audioFileName
+            ? String(audioFileName).replace(/\.[^/.]+$/, '')
+            : String(goldmineAnswer).length < 40
+                ? String(goldmineAnswer)
+                : `${String(artistName)} Release`;
         // Auto-create/link User, Artist & Song in DB so songs show up directly on the /releases page!
         try {
             let user = await prisma_js_1.prisma.user.findUnique({ where: { email: userEmail } });
@@ -110,11 +116,6 @@ async function submitWaitlist(req, res) {
                     },
                 });
             }
-            const inferredTitle = audioFileName
-                ? audioFileName.replace(/\.[^/.]+$/, '')
-                : String(goldmineAnswer).length < 40
-                    ? String(goldmineAnswer)
-                    : `${String(artistName)} Release`;
             const existingSong = await prisma_js_1.prisma.song.findFirst({
                 where: {
                     artistId: artist.id,
@@ -163,14 +164,24 @@ async function submitWaitlist(req, res) {
                 data: { submissionId: submission.id },
             });
         }
+        // Auto-create backend Project folder for the artist's workspace
+        let createdProject = null;
+        try {
+            createdProject = await project_service_js_1.projectService.createProject(userEmail, projectName ? String(projectName).trim() : '', undefined, inferredTitle, audioFileName ? String(audioFileName) : undefined, demoUrl ? String(demoUrl) : undefined);
+        }
+        catch (projErr) {
+            console.error('⚠️ [submitWaitlist] Failed to auto-create project:', projErr);
+        }
         res.status(201).json({
             success: true,
-            message: "You're one of our first users! We will notify you when your account and strategy are ready.",
+            message: "Project folder created & waitlist submitted successfully!",
             submission: {
                 id: submission.id,
                 artistName: submission.artistName,
+                projectName: String(projectName || 'Untitled Project'),
                 shareToken: submission.shareToken,
             },
+            project: createdProject,
         });
     }
     catch (error) {
