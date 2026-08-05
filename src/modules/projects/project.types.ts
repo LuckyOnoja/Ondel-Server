@@ -1,5 +1,6 @@
 export interface ProjectSongDto {
   id: string
+  slug?: string
   title: string
   artistName: string
   audioUrl?: string
@@ -8,6 +9,11 @@ export interface ProjectSongDto {
   releaseDate?: string
   campaignsCount?: number
   gradient?: string
+  bpm?: number
+  genre?: string
+  subgenres?: string[]
+  similarArtists?: string[]
+  calendarPlanGenerated?: boolean
 }
 
 export interface ProjectVaultItemDto {
@@ -25,6 +31,8 @@ export interface ProjectCalendarEventDto {
   date: string
   category: 'Release' | 'Content' | 'Pitch' | 'Promo'
   songTitle?: string
+  songId?: string
+  completed?: boolean
 }
 
 export interface ProjectCampaignItemDto {

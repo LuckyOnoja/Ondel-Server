@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.projectService = exports.ProjectService = exports.GRADIENT_PRESETS = void 0;
 const prisma_js_1 = require("../../config/prisma.js");
+const slugify_js_1 = require("../../utils/slugify.js");
+const audio_scrutinizer_service_js_1 = require("../songs/audio-scrutinizer.service.js");
 exports.GRADIENT_PRESETS = [
     'linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #3B82F6 100%)', // Neon Violet Glow
     'linear-gradient(135deg, #10B981 0%, #06B6D4 50%, #3B82F6 100%)', // Electric Cyan Mint
@@ -37,6 +39,7 @@ class ProjectService {
             releaseTargetDate: p.releaseTargetDate ? new Date(p.releaseTargetDate).toISOString().split('T')[0] : undefined,
             songs: (p.songs || []).map((s, idx) => ({
                 id: s.id,
+                slug: s.slug || undefined,
                 title: s.title,
                 artistName: s.artist?.name || 'Artist',
                 audioUrl: s.audioUrl || undefined,
@@ -45,6 +48,11 @@ class ProjectService {
                 releaseDate: s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : undefined,
                 campaignsCount: s.campaigns ? s.campaigns.length : 0,
                 gradient: s.gradient || exports.GRADIENT_PRESETS[idx % exports.GRADIENT_PRESETS.length],
+                bpm: s.bpm || (s.metadata ? s.metadata.estimatedBpm : undefined) || undefined,
+                genre: s.genre || undefined,
+                subgenres: s.subgenres || [],
+                similarArtists: s.similarArtists || [],
+                calendarPlanGenerated: s.calendarPlanGenerated || false,
             })),
             vaultItems: (p.vaultItems || []).map((v) => ({
                 id: v.id,
@@ -60,6 +68,8 @@ class ProjectService {
                 date: ce.date ? new Date(ce.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                 category: ce.category,
                 songTitle: ce.songTitle || undefined,
+                songId: ce.songId || undefined,
+                completed: ce.completed || false,
             })),
             campaigns: (p.campaigns || []).map((c) => ({
                 id: c.id,
@@ -205,11 +215,18 @@ class ProjectService {
             const songTitle = initialSongTitle ||
                 (audioFileName ? audioFileName.replace(/\.[^/.]+$/, '') : 'Initial Project Track');
             const songGradient = await this.getUniqueSongGradient(newProject.id);
+            let slug = (0, slugify_js_1.generateSongSlug)(songTitle);
+            let existingSlug = await prisma_js_1.prisma.song.findUnique({ where: { slug } });
+            while (existingSlug) {
+                slug = (0, slugify_js_1.generateSongSlug)(songTitle);
+                existingSlug = await prisma_js_1.prisma.song.findUnique({ where: { slug } });
+            }
             await prisma_js_1.prisma.song.create({
                 data: {
                     artistId: artist.id,
                     projectId: newProject.id,
                     title: songTitle,
+                    slug,
                     genre: 'Afrobeats',
                     audioUrl: audioUrl || null,
                     gradient: songGradient,
@@ -270,19 +287,33 @@ class ProjectService {
             });
         }
         const songGradient = await this.getUniqueSongGradient(project.id);
+        let slug = (0, slugify_js_1.generateSongSlug)(songData.title);
+        let existingSlug = await prisma_js_1.prisma.song.findUnique({ where: { slug } });
+        while (existingSlug) {
+            slug = (0, slugify_js_1.generateSongSlug)(songData.title);
+            existingSlug = await prisma_js_1.prisma.song.findUnique({ where: { slug } });
+        }
         const createdSong = await prisma_js_1.prisma.song.create({
             data: {
                 artistId: artist.id,
                 projectId: project.id,
                 title: songData.title,
+                slug,
                 genre: 'Afrobeats',
                 audioUrl: songData.audioUrl || null,
                 gradient: songGradient,
                 metadata: songData.audioFileName ? { audioFileName: songData.audioFileName } : undefined,
             },
         });
+        // Trigger background audio A&R analysis if audioUrl is provided
+        if (createdSong.audioUrl) {
+            audio_scrutinizer_service_js_1.AudioScrutinizerService.scrutinizeSong(createdSong.id).catch((err) => {
+                console.warn('[ProjectService] Background scrutinization failed:', err.message);
+            });
+        }
         return {
             id: createdSong.id,
+            slug: createdSong.slug || slug,
             title: createdSong.title,
             artistName: artist.name,
             audioUrl: createdSong.audioUrl || undefined,

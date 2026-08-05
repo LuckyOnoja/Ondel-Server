@@ -13,4 +13,5 @@ exports.CreateSongSchema = zod_1.z.object({
     similarArtists: zod_1.z.array(zod_1.z.string()).optional().default([]),
     soundVibe: zod_1.z.string().optional(),
     bpm: zod_1.z.union([zod_1.z.number(), zod_1.z.string()]).transform((val) => typeof val === 'string' ? parseInt(val, 10) : val).optional(),
+    projectId: zod_1.z.string().optional(),
 });

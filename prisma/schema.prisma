@@ -228,35 +228,54 @@ model VaultItem {
 model CalendarEvent {
   id        String   @id @default(cuid())
   projectId String
+  songId    String?
   title     String
   date      DateTime
   category  String   // Release, Content, Pitch, Promo
   songTitle String?
+  completed Boolean  @default(false)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  song      Song?    @relation(fields: [songId], references: [id], onDelete: Cascade)
 
   @@map("calendar_events")
 }
 
 model Song {
-  id             String     @id @default(cuid())
-  artistId       String
-  projectId      String?
-  title          String
-  genre          String
-  subgenres      String[]
-  audioUrl       String?
-  epkUrl         String?
-  metadata       Json?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
-  similarArtists String[]
-  soundVibe      String?
-  gradient       String?
-  campaigns      Campaign[]
-  artist         Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
-  project        Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  id                    String          @id @default(cuid())
+  slug                  String?         @unique
+  artistId              String
+  projectId             String?
+  title                 String
+  genre                 String
+  subgenres             String[]
+  bpm                   Int?
+  audioUrl              String?
+  epkUrl                String?
+  metadata              Json?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  similarArtists        String[]
+  soundVibe             String?
+  gradient              String?
+  calendarPlanGenerated Boolean         @default(false)
+  campaigns             Campaign[]
+  calendarEvents        CalendarEvent[]
+  chatMessages          ChatMessage[]
+  artist                Artist          @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  project               Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@map("songs")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  songId    String
+  sender    String   // user or ondie
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+  song      Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
 }
 
 model CreditAccount {

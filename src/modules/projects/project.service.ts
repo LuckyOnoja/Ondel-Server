@@ -1,4 +1,6 @@
 import { prisma } from '../../config/prisma.js'
+import { generateSongSlug } from '../../utils/slugify.js'
+import { AudioScrutinizerService } from '../songs/audio-scrutinizer.service.js'
 import { ProjectDto, ProjectSongDto, ProjectVaultItemDto, ProjectCalendarEventDto, ProjectCampaignItemDto } from './project.types.js'
 
 export const GRADIENT_PRESETS = [
@@ -37,6 +39,7 @@ export class ProjectService {
       releaseTargetDate: p.releaseTargetDate ? new Date(p.releaseTargetDate).toISOString().split('T')[0] : undefined,
       songs: (p.songs || []).map((s: any, idx: number) => ({
         id: s.id,
+        slug: s.slug || undefined,
         title: s.title,
         artistName: s.artist?.name || 'Artist',
         audioUrl: s.audioUrl || undefined,
@@ -45,6 +48,11 @@ export class ProjectService {
         releaseDate: s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : undefined,
         campaignsCount: s.campaigns ? s.campaigns.length : 0,
         gradient: s.gradient || GRADIENT_PRESETS[idx % GRADIENT_PRESETS.length],
+        bpm: s.bpm || (s.metadata ? (s.metadata as any).estimatedBpm : undefined) || undefined,
+        genre: s.genre || undefined,
+        subgenres: s.subgenres || [],
+        similarArtists: s.similarArtists || [],
+        calendarPlanGenerated: s.calendarPlanGenerated || false,
       })),
       vaultItems: (p.vaultItems || []).map((v: any) => ({
         id: v.id,
@@ -60,6 +68,8 @@ export class ProjectService {
         date: ce.date ? new Date(ce.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         category: ce.category as any,
         songTitle: ce.songTitle || undefined,
+        songId: ce.songId || undefined,
+        completed: ce.completed || false,
       })),
       campaigns: (p.campaigns || []).map((c: any) => ({
         id: c.id,
@@ -232,11 +242,19 @@ export class ProjectService {
 
       const songGradient = await this.getUniqueSongGradient(newProject.id)
 
+      let slug = generateSongSlug(songTitle)
+      let existingSlug = await prisma.song.findUnique({ where: { slug } })
+      while (existingSlug) {
+        slug = generateSongSlug(songTitle)
+        existingSlug = await prisma.song.findUnique({ where: { slug } })
+      }
+
       await prisma.song.create({
         data: {
           artistId: artist.id,
           projectId: newProject.id,
           title: songTitle,
+          slug,
           genre: 'Afrobeats',
           audioUrl: audioUrl || null,
           gradient: songGradient,
@@ -309,11 +327,19 @@ export class ProjectService {
 
     const songGradient = await this.getUniqueSongGradient(project.id)
 
+    let slug = generateSongSlug(songData.title)
+    let existingSlug = await prisma.song.findUnique({ where: { slug } })
+    while (existingSlug) {
+      slug = generateSongSlug(songData.title)
+      existingSlug = await prisma.song.findUnique({ where: { slug } })
+    }
+
     const createdSong = await prisma.song.create({
       data: {
         artistId: artist.id,
         projectId: project.id,
         title: songData.title,
+        slug,
         genre: 'Afrobeats',
         audioUrl: songData.audioUrl || null,
         gradient: songGradient,
@@ -321,8 +347,16 @@ export class ProjectService {
       },
     })
 
+    // Trigger background audio A&R analysis if audioUrl is provided
+    if (createdSong.audioUrl) {
+      AudioScrutinizerService.scrutinizeSong(createdSong.id).catch((err) => {
+        console.warn('[ProjectService] Background scrutinization failed:', err.message)
+      })
+    }
+
     return {
       id: createdSong.id,
+      slug: createdSong.slug || slug,
       title: createdSong.title,
       artistName: artist.name,
       audioUrl: createdSong.audioUrl || undefined,
