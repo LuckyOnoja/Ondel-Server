@@ -25,9 +25,9 @@ export class SongService {
       });
     }
 
-    // 2. Upload audio file demo if buffer provided
-    let audioUrl: string | undefined = undefined;
-    if (audioFileBuffer) {
+    // 2. Upload audio file demo if buffer provided and no frontend direct audioUrl
+    let audioUrl: string | undefined = dto.audioUrl;
+    if (!audioUrl && audioFileBuffer) {
       try {
         audioUrl = await CloudinaryService.uploadAudioBuffer(audioFileBuffer, 'song_demos');
       } catch (err: any) {

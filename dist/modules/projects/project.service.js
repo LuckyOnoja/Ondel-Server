@@ -1,9 +1,16 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.projectService = exports.ProjectService = exports.GRADIENT_PRESETS = void 0;
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const prisma_js_1 = require("../../config/prisma.js");
 const slugify_js_1 = require("../../utils/slugify.js");
 const audio_scrutinizer_service_js_1 = require("../songs/audio-scrutinizer.service.js");
+const cloudinary_js_1 = require("../../config/cloudinary.js");
+const cloudinary_service_js_1 = require("../../services/cloudinary.service.js");
 exports.GRADIENT_PRESETS = [
     'linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #3B82F6 100%)', // Neon Violet Glow
     'linear-gradient(135deg, #10B981 0%, #06B6D4 50%, #3B82F6 100%)', // Electric Cyan Mint
@@ -56,6 +63,7 @@ class ProjectService {
             })),
             vaultItems: (p.vaultItems || []).map((v) => ({
                 id: v.id,
+                slug: v.slug || undefined,
                 name: v.name,
                 type: v.type,
                 size: v.size,
@@ -333,6 +341,7 @@ class ProjectService {
         });
         if (!project)
             throw new Error('Project not found in database');
+        const itemSlug = (0, slugify_js_1.generateSongSlug)(itemData.name);
         const createdItem = await prisma_js_1.prisma.vaultItem.create({
             data: {
                 projectId: project.id,
@@ -340,16 +349,107 @@ class ProjectService {
                 type: itemData.type || 'stem',
                 size: itemData.size || 'Unknown size',
                 fileUrl: itemData.fileUrl || null,
+                slug: itemSlug,
             },
         });
         return {
             id: createdItem.id,
+            slug: createdItem.slug || undefined,
             name: createdItem.name,
             type: createdItem.type,
             size: createdItem.size,
             uploadedAt: createdItem.uploadedAt.toISOString().split('T')[0],
             fileUrl: createdItem.fileUrl || undefined,
         };
+    }
+    /**
+     * Directly upload file buffer to Cloudinary or disk, and create VaultItem in DB
+     */
+    async uploadVaultFileToProject(userIdOrEmail, projectId, fileBuffer, fileName, type = 'master', size) {
+        const project = await prisma_js_1.prisma.project.findUnique({
+            where: { id: projectId },
+        });
+        if (!project)
+            throw new Error('Project not found in database');
+        let fileUrl = undefined;
+        if (fileBuffer && fileName) {
+            try {
+                const isImg = type === 'artwork' || fileName.match(/\.(png|jpg|jpeg|webp|gif|svg)$/i);
+                if (isImg) {
+                    fileUrl = await cloudinary_service_js_1.CloudinaryService.uploadProofBuffer(fileBuffer, 'ondel_vault');
+                }
+                else {
+                    fileUrl = await cloudinary_service_js_1.CloudinaryService.uploadAudioBuffer(fileBuffer, 'ondel_vault');
+                }
+            }
+            catch (cdnErr) {
+                console.warn('⚠️ [Cloudinary] Server upload fallback to disk:', cdnErr);
+                try {
+                    const uploadsDir = path_1.default.join(process.cwd(), 'uploads', 'vault');
+                    if (!fs_1.default.existsSync(uploadsDir)) {
+                        fs_1.default.mkdirSync(uploadsDir, { recursive: true });
+                    }
+                    const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+                    const diskPath = path_1.default.join(uploadsDir, safeName);
+                    fs_1.default.writeFileSync(diskPath, fileBuffer);
+                    fileUrl = `http://localhost:8000/uploads/vault/${safeName}`;
+                }
+                catch (diskErr) {
+                    console.error('❌ Disk upload error:', diskErr);
+                }
+            }
+        }
+        const itemSlug = (0, slugify_js_1.generateSongSlug)(fileName || 'vault-asset');
+        const createdItem = await prisma_js_1.prisma.vaultItem.create({
+            data: {
+                projectId: project.id,
+                name: fileName || 'Uploaded File',
+                type: type || 'master',
+                size: size || 'Unknown size',
+                fileUrl: fileUrl || null,
+                slug: itemSlug,
+            },
+        });
+        return {
+            id: createdItem.id,
+            slug: createdItem.slug || undefined,
+            name: createdItem.name,
+            type: createdItem.type,
+            size: createdItem.size,
+            uploadedAt: createdItem.uploadedAt.toISOString().split('T')[0],
+            fileUrl: createdItem.fileUrl || undefined,
+        };
+    }
+    /**
+     * Delete a vault item from an existing project in PostgreSQL DB and purge from Cloudinary CDN if applicable
+     */
+    async deleteVaultItemFromProject(userIdOrEmail, projectId, vaultItemId) {
+        const vaultItem = await prisma_js_1.prisma.vaultItem.findUnique({
+            where: { id: vaultItemId },
+        });
+        if (!vaultItem || vaultItem.projectId !== projectId) {
+            throw new Error('Vault item not found in project');
+        }
+        // If fileUrl is a Cloudinary URL, purge resource from Cloudinary CDN
+        if (vaultItem.fileUrl && vaultItem.fileUrl.includes('cloudinary.com')) {
+            try {
+                const parts = vaultItem.fileUrl.split('/');
+                const fileWithExt = parts[parts.length - 1];
+                const publicId = fileWithExt ? fileWithExt.split('.')[0] : null;
+                if (publicId && (0, cloudinary_js_1.isCloudinaryConfigured)()) {
+                    await cloudinary_js_1.cloudinary.uploader.destroy(publicId, { resource_type: 'video' }).catch(() => null);
+                    await cloudinary_js_1.cloudinary.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => null);
+                    await cloudinary_js_1.cloudinary.uploader.destroy(publicId, { resource_type: 'raw' }).catch(() => null);
+                }
+            }
+            catch (cdnErr) {
+                console.warn('⚠️ [Cloudinary] Soft warning purging vault item resource:', cdnErr);
+            }
+        }
+        await prisma_js_1.prisma.vaultItem.delete({
+            where: { id: vaultItemId },
+        });
+        return true;
     }
     /**
      * Add a calendar event to an existing project in PostgreSQL DB

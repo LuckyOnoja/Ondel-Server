@@ -18,6 +18,7 @@ export interface ProjectSongDto {
 
 export interface ProjectVaultItemDto {
   id: string
+  slug?: string
   name: string
   type: 'stem' | 'master' | 'artwork' | 'document'
   size: string

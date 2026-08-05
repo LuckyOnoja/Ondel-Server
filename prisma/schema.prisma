@@ -220,6 +220,7 @@ model VaultItem {
   size       String
   uploadedAt DateTime @default(now())
   fileUrl    String?
+  slug       String?  @unique
   project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("vault_items")

@@ -92,6 +92,44 @@ export async function addVaultItemToProject(req: AuthRequest, res: Response): Pr
   }
 }
 
+export async function uploadVaultFileToProject(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const projectId = String(req.params.id)
+    const userIdentifier = req.user?.email || 'default_user'
+    const { name, type, size } = req.body
+    const fileBuffer = req.file ? req.file.buffer : undefined
+    const fileName = req.file ? req.file.originalname : name
+
+    const vaultItem = await projectService.uploadVaultFileToProject(
+      userIdentifier,
+      projectId,
+      fileBuffer,
+      fileName,
+      type || 'master',
+      size
+    )
+
+    res.status(201).json({ success: true, vaultItem })
+  } catch (error: any) {
+    console.error('[uploadVaultFileToProject error]:', error)
+    res.status(500).json({ success: false, message: error.message || 'Failed to upload vault item' })
+  }
+}
+
+export async function deleteVaultItemFromProject(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const projectId = String(req.params.id)
+    const vaultItemId = String(req.params.vaultItemId)
+    const userIdentifier = req.user?.email || 'default_user'
+
+    await projectService.deleteVaultItemFromProject(userIdentifier, projectId, vaultItemId)
+    res.status(200).json({ success: true, message: 'Vault item deleted successfully' })
+  } catch (error: any) {
+    console.error('[deleteVaultItemFromProject error]:', error)
+    res.status(500).json({ success: false, message: error.message || 'Failed to delete vault item' })
+  }
+}
+
 export async function addCalendarEventToProject(req: AuthRequest, res: Response): Promise<void> {
   try {
     const projectId = String(req.params.id)

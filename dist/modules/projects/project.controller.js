@@ -4,6 +4,8 @@ exports.getProjects = getProjects;
 exports.createProject = createProject;
 exports.addSongToProject = addSongToProject;
 exports.addVaultItemToProject = addVaultItemToProject;
+exports.uploadVaultFileToProject = uploadVaultFileToProject;
+exports.deleteVaultItemFromProject = deleteVaultItemFromProject;
 exports.addCalendarEventToProject = addCalendarEventToProject;
 exports.renameProject = renameProject;
 const project_service_js_1 = require("./project.service.js");
@@ -79,6 +81,34 @@ async function addVaultItemToProject(req, res) {
     catch (error) {
         console.error('[addVaultItemToProject error]:', error);
         res.status(500).json({ success: false, message: 'Failed to add vault item to project' });
+    }
+}
+async function uploadVaultFileToProject(req, res) {
+    try {
+        const projectId = String(req.params.id);
+        const userIdentifier = req.user?.email || 'default_user';
+        const { name, type, size } = req.body;
+        const fileBuffer = req.file ? req.file.buffer : undefined;
+        const fileName = req.file ? req.file.originalname : name;
+        const vaultItem = await project_service_js_1.projectService.uploadVaultFileToProject(userIdentifier, projectId, fileBuffer, fileName, type || 'master', size);
+        res.status(201).json({ success: true, vaultItem });
+    }
+    catch (error) {
+        console.error('[uploadVaultFileToProject error]:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to upload vault item' });
+    }
+}
+async function deleteVaultItemFromProject(req, res) {
+    try {
+        const projectId = String(req.params.id);
+        const vaultItemId = String(req.params.vaultItemId);
+        const userIdentifier = req.user?.email || 'default_user';
+        await project_service_js_1.projectService.deleteVaultItemFromProject(userIdentifier, projectId, vaultItemId);
+        res.status(200).json({ success: true, message: 'Vault item deleted successfully' });
+    }
+    catch (error) {
+        console.error('[deleteVaultItemFromProject error]:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to delete vault item' });
     }
 }
 async function addCalendarEventToProject(req, res) {

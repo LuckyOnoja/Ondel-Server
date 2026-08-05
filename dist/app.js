@@ -18,6 +18,7 @@ const campaign_routes_js_1 = __importDefault(require("./modules/campaigns/campai
 const song_routes_js_1 = __importDefault(require("./modules/songs/song.routes.js"));
 const webhook_routes_js_1 = __importDefault(require("./modules/webhooks/webhook.routes.js"));
 const project_routes_js_1 = __importDefault(require("./modules/projects/project.routes.js"));
+const publicRoutes_js_1 = __importDefault(require("./routes/publicRoutes.js"));
 exports.app = (0, express_1.default)();
 // Global Middlewares
 exports.app.use((0, cors_1.default)({
@@ -51,6 +52,8 @@ exports.app.use('/api/v1/projects', project_routes_js_1.default);
 exports.app.use('/api/projects', project_routes_js_1.default);
 exports.app.use('/api/v1/webhooks', webhook_routes_js_1.default);
 exports.app.use('/api/webhooks', webhook_routes_js_1.default);
+exports.app.use('/api/v1/public', publicRoutes_js_1.default);
+exports.app.use('/api/public', publicRoutes_js_1.default);
 // 404 Handler
 exports.app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint not found' });

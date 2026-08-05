@@ -11,6 +11,7 @@ export const CreateSongSchema = z.object({
   similarArtists: z.array(z.string()).optional().default([]),
   soundVibe: z.string().optional(),
   bpm: z.union([z.number(), z.string()]).transform((val) => typeof val === 'string' ? parseInt(val, 10) : val).optional(),
+  audioUrl: z.string().optional(),
   projectId: z.string().optional(),
 });
 
