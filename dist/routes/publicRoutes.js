@@ -9,18 +9,18 @@ const router = (0, express_1.Router)();
  */
 router.get('/listen', async (req, res) => {
     try {
-        const songQuery = String(req.query.song || '').trim();
-        if (!songQuery) {
-            res.status(400).json({ success: false, message: 'Missing song query parameter' });
+        const query = String(req.query.song || req.query.image || req.query.video || req.query.slug || req.query.id || '').trim();
+        if (!query) {
+            res.status(400).json({ success: false, message: 'Missing media query parameter (song, image, or video)' });
             return;
         }
         // 1. Check VaultItem by slug or id
         const vaultItem = await prisma_js_1.prisma.vaultItem.findFirst({
             where: {
                 OR: [
-                    { slug: songQuery },
-                    { id: songQuery },
-                    { name: songQuery },
+                    { slug: query },
+                    { id: query },
+                    { name: query },
                 ],
             },
             include: {
@@ -32,13 +32,21 @@ router.get('/listen', async (req, res) => {
             },
         });
         if (vaultItem) {
+            let mediaType = 'audio';
+            if (vaultItem.type === 'artwork' || Boolean(vaultItem.name.match(/\.(png|jpg|jpeg|webp|gif|svg)$/i))) {
+                mediaType = 'image';
+            }
+            else if (Boolean(vaultItem.name.match(/\.(mp4|mov|webm|mkv|avi)$/i))) {
+                mediaType = 'video';
+            }
             res.status(200).json({
                 success: true,
                 track: {
                     id: vaultItem.id,
                     title: vaultItem.name,
                     slug: vaultItem.slug || vaultItem.id,
-                    fileUrl: vaultItem.fileUrl || 'https://raw.githubusercontent.com/mdn/webaudio-examples/main/audio-analyser/viper.mp3',
+                    fileUrl: vaultItem.fileUrl || '',
+                    mediaType,
                     artistName: vaultItem.project?.user?.name || vaultItem.project?.name || 'Independent Artist',
                     projectName: vaultItem.project?.name,
                     type: vaultItem.type,
@@ -52,9 +60,9 @@ router.get('/listen', async (req, res) => {
         const song = await prisma_js_1.prisma.song.findFirst({
             where: {
                 OR: [
-                    { slug: songQuery },
-                    { id: songQuery },
-                    { title: songQuery },
+                    { slug: query },
+                    { id: query },
+                    { title: query },
                 ],
             },
             include: {

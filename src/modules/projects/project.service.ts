@@ -58,15 +58,25 @@ export class ProjectService {
         similarArtists: s.similarArtists || [],
         calendarPlanGenerated: s.calendarPlanGenerated || false,
       })),
-      vaultItems: (p.vaultItems || []).map((v: any) => ({
-        id: v.id,
-        slug: v.slug || undefined,
-        name: v.name,
-        type: v.type as any,
-        size: v.size,
-        uploadedAt: v.uploadedAt ? new Date(v.uploadedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        fileUrl: v.fileUrl || undefined,
-      })),
+      vaultItems: (() => {
+        const seen = new Set<string>()
+        const list: ProjectVaultItemDto[] = []
+        for (const v of p.vaultItems || []) {
+          const key = `${v.name}-${v.fileUrl || v.id}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          list.push({
+            id: v.id,
+            slug: v.slug || undefined,
+            name: v.name,
+            type: v.type as any,
+            size: v.size,
+            uploadedAt: v.uploadedAt ? new Date(v.uploadedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            fileUrl: v.fileUrl || undefined,
+          })
+        }
+        return list
+      })(),
       calendarEvents: (p.calendarEvents || []).map((ce: any) => ({
         id: ce.id,
         title: ce.title,
@@ -479,6 +489,23 @@ export class ProjectService {
     }
   }
 
+  private extractCloudinaryPublicId(url: string): string | null {
+    try {
+      const uploadIndex = url.indexOf('/upload/')
+      if (uploadIndex === -1) return null
+      let path = url.substring(uploadIndex + 8)
+      if (path.startsWith('v') && path.includes('/')) {
+        const slashIndex = path.indexOf('/')
+        path = path.substring(slashIndex + 1)
+      }
+      const lastDotIndex = path.lastIndexOf('.')
+      const publicId = lastDotIndex !== -1 ? path.substring(0, lastDotIndex) : path
+      return publicId
+    } catch (err) {
+      return null
+    }
+  }
+
   /**
    * Delete a vault item from an existing project in PostgreSQL DB and purge from Cloudinary CDN if applicable
    */
@@ -498,13 +525,12 @@ export class ProjectService {
     // If fileUrl is a Cloudinary URL, purge resource from Cloudinary CDN
     if (vaultItem.fileUrl && vaultItem.fileUrl.includes('cloudinary.com')) {
       try {
-        const parts = vaultItem.fileUrl.split('/')
-        const fileWithExt = parts[parts.length - 1]
-        const publicId = fileWithExt ? fileWithExt.split('.')[0] : null
+        const publicId = this.extractCloudinaryPublicId(vaultItem.fileUrl)
         if (publicId && isCloudinaryConfigured()) {
           await cloudinary.uploader.destroy(publicId, { resource_type: 'video' }).catch(() => null)
           await cloudinary.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => null)
           await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' }).catch(() => null)
+          console.log(`✅ [Cloudinary CDN Purge] Successfully purged publicId "${publicId}"`)
         }
       } catch (cdnErr) {
         console.warn('⚠️ [Cloudinary] Soft warning purging vault item resource:', cdnErr)
