@@ -100,13 +100,18 @@ export class SongService {
     return this.getSongById(songId);
   }
 
-  static async getUserSongs(userId: string) {
-    const songs = await prisma.song.findMany({
-      where: {
-        artist: {
-          userId,
-        },
+  static async getUserSongs(userId: string, projectId?: string) {
+    const where: any = {
+      artist: {
+        userId,
       },
+    };
+    if (projectId) {
+      where.projectId = projectId;
+    }
+
+    const songs = await prisma.song.findMany({
+      where,
       include: {
         artist: true,
         campaigns: {

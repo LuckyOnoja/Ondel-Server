@@ -92,13 +92,17 @@ class SongService {
         await audio_scrutinizer_service_1.AudioScrutinizerService.scrutinizeSong(songId);
         return this.getSongById(songId);
     }
-    static async getUserSongs(userId) {
-        const songs = await prisma_1.prisma.song.findMany({
-            where: {
-                artist: {
-                    userId,
-                },
+    static async getUserSongs(userId, projectId) {
+        const where = {
+            artist: {
+                userId,
             },
+        };
+        if (projectId) {
+            where.projectId = projectId;
+        }
+        const songs = await prisma_1.prisma.song.findMany({
+            where,
             include: {
                 artist: true,
                 campaigns: {

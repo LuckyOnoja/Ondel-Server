@@ -45,11 +45,12 @@ class SongController {
     static async getUserSongs(req, res) {
         try {
             const userId = String(req.user?.userId || req.user?.id || req.query.userId || req.params.userId || '');
+            const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
             if (!userId || userId === 'undefined') {
                 res.status(400).json({ success: false, error: 'userId is required' });
                 return;
             }
-            const songs = await song_service_1.SongService.getUserSongs(userId);
+            const songs = await song_service_1.SongService.getUserSongs(userId, projectId);
             res.status(200).json({ success: true, data: songs });
         }
         catch (error) {

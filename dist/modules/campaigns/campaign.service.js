@@ -199,9 +199,13 @@ class CampaignService {
         }
         return campaign;
     }
-    static async getUserCampaigns(userId) {
+    static async getUserCampaigns(userId, projectId) {
+        const where = { userId };
+        if (projectId) {
+            where.song = { projectId };
+        }
         const campaigns = await prisma_1.prisma.campaign.findMany({
-            where: { userId },
+            where,
             include: {
                 song: { include: { artist: true } },
                 targets: {

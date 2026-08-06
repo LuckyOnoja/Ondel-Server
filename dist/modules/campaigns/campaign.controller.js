@@ -37,11 +37,12 @@ class CampaignController {
     static async getUserCampaigns(req, res) {
         try {
             const userId = String(req.user?.userId || req.user?.id || req.params.userId || req.query.userId || '');
+            const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
             if (!userId || userId === 'undefined') {
                 res.status(400).json({ success: false, error: 'userId is required' });
                 return;
             }
-            const campaigns = await campaign_service_1.CampaignService.getUserCampaigns(userId);
+            const campaigns = await campaign_service_1.CampaignService.getUserCampaigns(userId, projectId);
             res.status(200).json({ success: true, data: campaigns });
         }
         catch (error) {
