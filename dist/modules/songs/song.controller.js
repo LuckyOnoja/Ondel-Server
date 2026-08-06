@@ -159,5 +159,15 @@ class SongController {
             res.status(400).json({ success: false, error: error.message || error });
         }
     }
+    static async deleteSong(req, res) {
+        try {
+            const songId = String(req.params.id);
+            await song_service_1.SongService.deleteSong(songId);
+            res.status(200).json({ success: true, message: 'Song and all associated records deleted successfully' });
+        }
+        catch (error) {
+            res.status(400).json({ success: false, error: error.message || 'Failed to delete song' });
+        }
+    }
 }
 exports.SongController = SongController;

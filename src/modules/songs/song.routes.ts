@@ -23,5 +23,6 @@ router.patch('/calendar-events/:eventId', requireAuth, SongController.updateCale
 router.post('/:id/calendar-events', requireAuth, SongController.createCalendarEvent);
 
 router.get('/:id', requireAuth, SongController.getSongById);
+router.delete('/:id', requireAuth, SongController.deleteSong);
 
 export default router;

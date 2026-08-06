@@ -23,4 +23,5 @@ router.patch('/:id/release-date', authMiddleware_js_1.requireAuth, song_controll
 router.patch('/calendar-events/:eventId', authMiddleware_js_1.requireAuth, song_controller_js_1.SongController.updateCalendarEvent);
 router.post('/:id/calendar-events', authMiddleware_js_1.requireAuth, song_controller_js_1.SongController.createCalendarEvent);
 router.get('/:id', authMiddleware_js_1.requireAuth, song_controller_js_1.SongController.getSongById);
+router.delete('/:id', authMiddleware_js_1.requireAuth, song_controller_js_1.SongController.deleteSong);
 exports.default = router;

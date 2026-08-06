@@ -164,4 +164,14 @@ export class SongController {
       res.status(400).json({ success: false, error: error.message || error });
     }
   }
+
+  static async deleteSong(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const songId = String(req.params.id);
+      await SongService.deleteSong(songId);
+      res.status(200).json({ success: true, message: 'Song and all associated records deleted successfully' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: error.message || 'Failed to delete song' });
+    }
+  }
 }

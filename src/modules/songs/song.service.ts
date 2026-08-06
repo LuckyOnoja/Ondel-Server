@@ -398,4 +398,55 @@ export class SongService {
       },
     });
   }
+
+  static async deleteSong(songId: string) {
+    const song = await prisma.song.findUnique({
+      where: { id: songId },
+    });
+
+    if (!song) {
+      throw new Error('Song not found');
+    }
+
+    // 1. Purge audio demo file from Cloudinary CDN if it exists
+    if (song.audioUrl && song.audioUrl.includes('cloudinary.com')) {
+      try {
+        const uploadIndex = song.audioUrl.indexOf('/upload/');
+        if (uploadIndex !== -1) {
+          let path = song.audioUrl.substring(uploadIndex + 8);
+          if (path.startsWith('v') && path.includes('/')) {
+            path = path.substring(path.indexOf('/') + 1);
+          }
+          const lastDotIndex = path.lastIndexOf('.');
+          const publicId = lastDotIndex !== -1 ? path.substring(0, lastDotIndex) : path;
+          if (publicId) {
+            await CloudinaryService.destroyResource(publicId);
+            console.log(`✅ [Cloudinary CDN Purge] Successfully purged song publicId "${publicId}"`);
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ [Cloudinary] Soft warning purging song audio demo resource:', err);
+      }
+    }
+
+    // 2. Delete related records in database (CalendarEvents, ChatMessages, Campaigns)
+    await prisma.calendarEvent.deleteMany({
+      where: { songId },
+    });
+
+    await prisma.chatMessage.deleteMany({
+      where: { songId },
+    });
+
+    await prisma.campaign.deleteMany({
+      where: { songId },
+    });
+
+    // 3. Delete song record from database
+    await prisma.song.delete({
+      where: { id: songId },
+    });
+
+    return true;
+  }
 }
