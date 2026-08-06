@@ -199,9 +199,12 @@ class CampaignService {
         }
         return campaign;
     }
-    static async getUserCampaigns(userId, projectId) {
+    static async getUserCampaigns(userId, projectId, songId) {
         const where = { userId };
-        if (projectId) {
+        if (songId) {
+            where.songId = songId;
+        }
+        else if (projectId) {
             where.song = { projectId };
         }
         const campaigns = await prisma_1.prisma.campaign.findMany({

@@ -37,11 +37,12 @@ export class CampaignController {
     try {
       const userId = String((req as any).user?.userId || (req as any).user?.id || req.params.userId || req.query.userId || '');
       const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+      const songId = req.query.songId ? String(req.query.songId) : undefined;
       if (!userId || userId === 'undefined') {
         res.status(400).json({ success: false, error: 'userId is required' });
         return;
       }
-      const campaigns = await CampaignService.getUserCampaigns(userId, projectId);
+      const campaigns = await CampaignService.getUserCampaigns(userId, projectId, songId);
       res.status(200).json({ success: true, data: campaigns });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message || error });

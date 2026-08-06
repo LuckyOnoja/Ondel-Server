@@ -38,11 +38,12 @@ class CampaignController {
         try {
             const userId = String(req.user?.userId || req.user?.id || req.params.userId || req.query.userId || '');
             const projectId = req.query.projectId ? String(req.query.projectId) : undefined;
+            const songId = req.query.songId ? String(req.query.songId) : undefined;
             if (!userId || userId === 'undefined') {
                 res.status(400).json({ success: false, error: 'userId is required' });
                 return;
             }
-            const campaigns = await campaign_service_1.CampaignService.getUserCampaigns(userId, projectId);
+            const campaigns = await campaign_service_1.CampaignService.getUserCampaigns(userId, projectId, songId);
             res.status(200).json({ success: true, data: campaigns });
         }
         catch (error) {

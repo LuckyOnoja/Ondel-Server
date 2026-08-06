@@ -236,9 +236,11 @@ export class CampaignService {
     return campaign;
   }
 
-  static async getUserCampaigns(userId: string, projectId?: string) {
+  static async getUserCampaigns(userId: string, projectId?: string, songId?: string) {
     const where: any = { userId };
-    if (projectId) {
+    if (songId) {
+      where.songId = songId;
+    } else if (projectId) {
       where.song = { projectId };
     }
 
