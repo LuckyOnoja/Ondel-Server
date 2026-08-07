@@ -3,10 +3,15 @@ import { CreditTransactionType } from '@prisma/client';
 
 export class CreditService {
   static async getBalance(userId: string): Promise<number> {
-    const account = await prisma.creditAccount.findUnique({
+    let account = await prisma.creditAccount.findUnique({
       where: { userId },
     });
-    return account ? account.balance : 0;
+    if (!account) {
+      account = await prisma.creditAccount.create({
+        data: { userId, balance: 500 },
+      });
+    }
+    return account.balance;
   }
 
   static async addCredits(userId: string, amount: number, referenceId?: string, metadata?: any) {

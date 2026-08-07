@@ -12,8 +12,8 @@ exports.buildOndelEmailTemplate = buildOndelEmailTemplate;
  */
 function buildOndelEmailTemplate(options) {
     const { badgeText, subtitle, title, bodyHtml, ctaText, ctaUrl, footerText = 'If you did not request this email, please disregard this message.', } = options;
-    // Base64 Data URI PNG logo so Gmail never blocks it as an external remote image
-    const logoDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAMAAAAOusbgAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAAB3RJTUUH6ggDETUTYqU8RAAAAMlQTFRFAAAADAwMDw8PFBQUEhISDw8PEREREBAQEBAQEREREBAQEhISEBAQEhISEREREBAQEREREhISERERERERERERERERGBgYICAgIiIiJiYmLi4uLy8vMzMzOjo6Pj4+QEBAQkJCQ0NDSUlJTExMTU1NU1NTW1tbXFxcZ2dnampqa2trbm5ucXFxcnJydXV1iIiIkZGRkpKSl5eXqamprq6uvb29w8PDxcXFx8fHy8vL0dHR0tLS2NjY3t7e5OTk6Ojo7u7u+Pj4////AdmrBwAAABV0Uk5TABUhJisyPEBdeH+Qq62yutDa7fD8ZfoXhwAAAAFiS0dEQhDXPfQAAAMQSURBVGje7Ztrd9MwDIbdrdu63rPW3O+4QBhgrgLGZcP//0eRtuvqJk0s2YkF5+T9qlhPFDu27CMLUdRBbzBJZnNZg+azZDLoHQiEDvtTWbum/UMH9mQkG9LopALbHcoGNeyWcU9lwzrdi+2MZeMad4rco0RGUHKU5x6fySg6O87FG4mbkXdi7iQymhK7n8cyosYR/6OSv6orI2szkwxjg4fX87OMrvW8PYoPHq3WQcmg5SrZ5wD3M/CUAzzN8hzJogPR4wH3xIAHPBATHvBE4NelR6/SNF2UGB++yIzn6i56jRIz5JMPvpiVLtN91vOLtfXzU6S7mUDm7Xd+mY32kN/92Ri/PkNm+gL5hh9vuOayYLz9Y2v9gHSIBf/eujaFfn5pGb/XDLZcF791altbcAtuwS24BbfgFtyCo4BfW8armDnXwjL+rBlcmWXe+7a1vq8ZXJ1Xv7kxXjwOBisAozVyJ/H2OuZPz+32YLVHg/Xak0bune4vMmP65NYWW2iPA+vNtwO/3aBxtRcObsU7V8lqr0hgoM8IZb89kMD2fKHoXOWeyv5lsA7qYiIY6gODNxj+IzB4g3UYGDFEEGCPYc0F1v7gnR8RgsC0KXNneJiQL21kAFjV/6VLwcr4h2xCwLjW7oANOQMB75BxryxQCwxlYOtAcC5k7cc1PlnmrgflxfXIMvMhI8kGGXAVOBcyqpsBG3DlTiLnxR1z7lUrB4Yg+HGNMG1qAtM8EZ8WlC6rcqYKz0LIbtEYHLqIdc12gjZcVpFoVdxXFqXC9sfa7JXWWmuelVIaSp4I3ZiXkF1yTrFCNkJ2T+1CNkFGLCmYMxBF5WKmddzhC1CwgFpOkKc+hM+NzBmwx0261nAJYCQanxXiwQg0JRmlgKvRQNvA08BLNuzvWurOjgxesrW9KgCAx/GMFP5FxdkKobwbz9HlGDVrJhIecMJXcsNWZMRWVsVWSMZWOsdXLMhWHslWEMpXAstW9MtX5sxW2M1Xys5XvM92XYHvggbflRS+Szh8144YL1rxXS1jvEwX7/rgXxPQzwOSt/z6AAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA4LTAzVDE3OjUzOjE5KzAwOjAwfSogJwAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wOC0wM1QxNzo1MzoxOSswMDowMAx3mJsAAAAASUVORK5CYII=';
+    // Hosted Cloudinary CDN PNG logo URL for 100% reliable rendering across all email clients
+    const logoUrl = 'https://res.cloudinary.com/dd36lgq0r/image/upload/f_png,w_256,h_256/v1786079641/ondel_logo_mark_v2.png';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -160,8 +160,8 @@ function buildOndelEmailTemplate(options) {
       <div class="email-header" style="padding: 36px 36px 20px 36px;">
         <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
           <tr>
-            <td style="padding-right: 12px; vertical-align: middle;">
-              <img src="${logoDataUri}" width="34" height="34" alt="" style="display: block; width: 34px; height: 34px; border: 0; outline: none; text-decoration: none;" />
+            <td style="padding-right: 12px; vertical-align: middle; border: 0 !important; outline: none !important;">
+              <img src="${logoUrl}" width="34" height="34" alt="Ondel" style="display: block; width: 34px; height: 34px; border: 0 !important; border-style: none !important; outline: none !important; text-decoration: none !important; box-shadow: none !important; background: transparent !important;" />
             </td>
             <td style="vertical-align: middle;">
               <span class="email-brand-text" style="font-size: 24px; font-weight: 800; letter-spacing: -0.03em; color: #09090b; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">Ondel</span>

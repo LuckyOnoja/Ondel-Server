@@ -43,5 +43,15 @@ class CloudinaryService {
             uploadStream.end(buffer);
         });
     }
+    static async destroyResource(publicId) {
+        try {
+            await cloudinary_1.v2.uploader.destroy(publicId, { resource_type: 'video' }).catch(() => null);
+            await cloudinary_1.v2.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => null);
+            await cloudinary_1.v2.uploader.destroy(publicId, { resource_type: 'raw' }).catch(() => null);
+        }
+        catch (err) {
+            console.warn('[CloudinaryService] destroyResource warning:', err);
+        }
+    }
 }
 exports.CloudinaryService = CloudinaryService;

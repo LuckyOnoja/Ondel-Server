@@ -62,40 +62,47 @@ async function sendOtpEmail(toEmail, otp) {
         return false;
     }
 }
-async function sendWaitlistConfirmationEmail(toEmail, artistName) {
+async function sendWaitlistConfirmationEmail(toEmail, artistName, inviteCode, position) {
     const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const codeStr = inviteCode || 'OND2026';
+    const posStr = position ? `#${position}` : '';
     if (!isConfigured) {
         console.log(`
   =============================================================
   📬 [DEVELOPMENT MAIL] Waitlist Confirmation for ${artistName} (${toEmail}):
-  "You're on the Ondel Waitlist! We are reviewing your release strategy."
+  Position: ${posStr} | Unique Invite Code: ${codeStr}
   =============================================================
     `);
         return true;
     }
     const html = (0, email_template_js_1.buildOndelEmailTemplate)({
-        badgeText: 'SUBMISSION CONFIRMED',
-        title: `Welcome to Ondel, ${artistName}`,
+        badgeText: 'WAITLIST ACCESS CODE',
+        title: `Welcome to Ondel, ${artistName}!`,
         bodyHtml: `
-      <p style="margin: 0 0 16px 0;">We received your music submission and release details. Ondel AI is building your custom 5-pillar launch strategy:</p>
+      <p style="margin: 0 0 16px 0;">Thank you for submitting your release details to Ondel. Your spot in line is <strong>${posStr || 'confirmed'}</strong>.</p>
+      
+      <div style="background-color: #f4f4f5; border-radius: 12px; padding: 20px; text-align: center; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0; font-size: 13px; color: #71717a; text-transform: uppercase; letter-spacing: 0.05em;">Your Unique Access Code</p>
+        <p style="margin: 0; font-size: 32px; font-weight: bold; font-family: monospace; letter-spacing: 4px; color: #18181b;">${codeStr}</p>
+      </div>
+
+      <p style="margin: 0 0 16px 0;">Enter this 6-digit access code on your waitlist confirmation page to unlock instant access to your release dashboard:</p>
       <ul style="line-height: 1.9; padding-left: 20px; margin: 0 0 20px 0;">
         <li>Personalised Release Roadmap</li>
         <li>30-Day Content Calendar</li>
         <li>Playlist Pitching Targets</li>
         <li>Creator Opportunities</li>
-        <li>Execution Checklist</li>
       </ul>
-      <p style="margin: 0;">You will receive an email as soon as your strategy workspace is generated.</p>
     `,
     });
     try {
         await transporter.sendMail({
             from: `"Ondel Team" <${env_js_1.env.EMAIL_USER}>`,
             to: toEmail,
-            subject: `You're on the Ondel Waitlist, ${artistName}!`,
+            subject: `Your Ondel Access Code: ${codeStr} ${posStr}`,
             html,
         });
-        console.log(`✅ [Mailer] Sent Waitlist Confirmation email successfully to ${toEmail}`);
+        console.log(`✅ [Mailer] Sent Waitlist Access Code email (${codeStr}) successfully to ${toEmail}`);
         return true;
     }
     catch (error) {

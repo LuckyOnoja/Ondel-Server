@@ -44,6 +44,7 @@ router.post('/upload-demo', upload.single('demo'), waitlistController_js_1.uploa
 router.get('/strategy/:token', waitlistController_js_1.getStrategyByToken);
 router.get('/my-strategy', authMiddleware_js_1.requireAuth, waitlistController_js_1.getMyStrategy);
 router.get('/check-status', waitlistController_js_1.checkStatus);
+router.post('/verify-code', waitlistController_js_1.verifyCode);
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissions);
 router.get('/admin/submissions/:id', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissionById);

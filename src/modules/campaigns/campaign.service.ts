@@ -236,9 +236,16 @@ export class CampaignService {
     return campaign;
   }
 
-  static async getUserCampaigns(userId: string) {
+  static async getUserCampaigns(userId: string, projectId?: string, songId?: string) {
+    const where: any = { userId };
+    if (songId) {
+      where.songId = songId;
+    } else if (projectId) {
+      where.song = { projectId };
+    }
+
     const campaigns = await prisma.campaign.findMany({
-      where: { userId },
+      where,
       include: {
         song: { include: { artist: true } },
         targets: {

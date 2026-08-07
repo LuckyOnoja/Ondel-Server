@@ -5,10 +5,15 @@ const prisma_1 = require("../../config/prisma");
 const client_1 = require("@prisma/client");
 class CreditService {
     static async getBalance(userId) {
-        const account = await prisma_1.prisma.creditAccount.findUnique({
+        let account = await prisma_1.prisma.creditAccount.findUnique({
             where: { userId },
         });
-        return account ? account.balance : 0;
+        if (!account) {
+            account = await prisma_1.prisma.creditAccount.create({
+                data: { userId, balance: 500 },
+            });
+        }
+        return account.balance;
     }
     static async addCredits(userId, amount, referenceId, metadata) {
         if (amount <= 0)

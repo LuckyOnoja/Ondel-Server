@@ -11,6 +11,8 @@ import matchingRoutes from './modules/matching/matching.routes.js';
 import campaignRoutes from './modules/campaigns/campaign.routes.js';
 import songRoutes from './modules/songs/song.routes.js';
 import webhookRoutes from './modules/webhooks/webhook.routes.js';
+import projectRoutes from './modules/projects/project.routes.js';
+import publicRoutes from './routes/publicRoutes.js';
 
 export const app = express();
 
@@ -46,8 +48,12 @@ app.use('/api/v1/credits', creditRoutes);
 app.use('/api/v1/matching', matchingRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/v1/songs', songRoutes);
+app.use('/api/v1/projects', projectRoutes);
+app.use('/api/projects', projectRoutes);
 app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/v1/public', publicRoutes);
+app.use('/api/public', publicRoutes);
 
 // 404 Handler
 app.use((req, res) => {

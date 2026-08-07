@@ -82,35 +82,57 @@ export class ReplyListenerService {
     const subject = mail.subject || '';
 
     // 1. Extract Target ID from header or body reference tag
-    let targetId: string | null = null;
+    const candidateTargetIds: string[] = [];
     const headerTargetId = mail.headers.get('x-ondel-target-id');
 
-    if (typeof headerTargetId === 'string') {
-      targetId = headerTargetId;
-    } else {
-      const match = bodyText.match(/Ref:\s*ONDEL-TGT-([a-zA-Z0-9_-]+)/i);
-      if (match && match[1]) {
-        targetId = match[1];
+    if (typeof headerTargetId === 'string' && headerTargetId.trim()) {
+      candidateTargetIds.push(headerTargetId.trim());
+    }
+
+    const matches = Array.from(bodyText.matchAll(/Ref:\s*ONDEL-TGT-([a-zA-Z0-9_-]+)/gi));
+    for (const m of matches) {
+      if (m[1] && !candidateTargetIds.includes(m[1])) {
+        candidateTargetIds.push(m[1]);
       }
     }
 
-    if (!targetId && !senderEmail) {
-      return false;
+    let target: any = null;
+
+    // Try candidate target IDs, prioritizing ones that are SENT/DELIVERED/PENDING
+    for (const tid of candidateTargetIds) {
+      const candidate = await prisma.campaignTarget.findUnique({
+        where: { id: tid },
+        include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
+      });
+      if (candidate) {
+        if ([CampaignTargetStatus.SENT, CampaignTargetStatus.DELIVERED, CampaignTargetStatus.PENDING].includes(candidate.status as any)) {
+          target = candidate;
+          break;
+        } else if (!target) {
+          target = candidate;
+        }
+      }
     }
 
-    // 2. Find matching CampaignTarget record
-    const target = await prisma.campaignTarget.findFirst({
-      where: targetId
-        ? { id: targetId }
-        : {
-            lead: {
-              contactPoints: {
-                some: { value: senderEmail },
-              },
+    // If still no target found (or if target found is already REPLIED), search by senderEmail for active SENT targets
+    if ((!target || ['REPLIED', 'ACCEPTED', 'INTERESTED', 'UNSUBSCRIBED', 'BOUNCED'].includes(target.status as any)) && senderEmail) {
+      const activeTarget = await prisma.campaignTarget.findFirst({
+        where: {
+          status: { in: [CampaignTargetStatus.SENT, CampaignTargetStatus.DELIVERED, CampaignTargetStatus.PENDING] },
+          lead: {
+            contactPoints: {
+              some: { value: senderEmail },
             },
           },
-      include: { lead: true, campaign: true },
-    });
+        },
+        orderBy: { sentAt: 'desc' },
+        include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
+      });
+
+      if (activeTarget) {
+        target = activeTarget;
+      }
+    }
 
     if (!target) {
       console.log(`[ReplyListener] Reply received from ${senderEmail}, but no matching CampaignTarget found.`);

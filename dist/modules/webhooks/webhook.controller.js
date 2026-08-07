@@ -45,18 +45,33 @@ class WebhookController {
                     where: { id: targetId },
                     include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
                 });
+                // If target found via direct ID is ALREADY replied to / finished, check if there's a active pitch sent to the same lead
+                if (target && ['REPLIED', 'ACCEPTED', 'INTERESTED', 'UNSUBSCRIBED', 'BOUNCED'].includes(target.status)) {
+                    const activeTarget = await prisma_1.prisma.campaignTarget.findFirst({
+                        where: {
+                            leadId: target.leadId,
+                            status: { in: [client_1.CampaignTargetStatus.SENT, client_1.CampaignTargetStatus.DELIVERED, client_1.CampaignTargetStatus.PENDING] },
+                        },
+                        orderBy: { sentAt: 'desc' },
+                        include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
+                    });
+                    if (activeTarget) {
+                        target = activeTarget;
+                    }
+                }
             }
-            // Layer 2: Exact Sender Email match
+            // Layer 2: Exact Sender Email match against active/sent targets
             if (!target && senderEmail) {
                 target = await prisma_1.prisma.campaignTarget.findFirst({
                     where: {
+                        status: { in: [client_1.CampaignTargetStatus.SENT, client_1.CampaignTargetStatus.DELIVERED, client_1.CampaignTargetStatus.PENDING] },
                         lead: {
                             contactPoints: {
                                 some: { value: senderEmail },
                             },
                         },
                     },
-                    orderBy: { updatedAt: 'desc' },
+                    orderBy: { sentAt: 'desc' },
                     include: { lead: true, campaign: { include: { song: { include: { artist: true } } } } },
                 });
             }

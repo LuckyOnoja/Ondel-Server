@@ -14,10 +14,12 @@ exports.createWeeklyOpportunity = createWeeklyOpportunity;
 exports.getAnalyticsMetrics = getAnalyticsMetrics;
 exports.getMyStrategy = getMyStrategy;
 exports.checkStatus = checkStatus;
+exports.verifyCode = verifyCode;
 const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
 const cloudinary_js_1 = require("../config/cloudinary.js");
+const project_service_js_1 = require("../modules/projects/project.service.js");
 /**
  * Public: Log step progression in the waitlist funnel
  */
@@ -49,27 +51,36 @@ async function logStep(req, res) {
  */
 async function submitWaitlist(req, res) {
     try {
-        const { artistName, email, urgency, biggestChallenge, goldmineAnswer, demoUrl, audioFileName, spotifyLink, appleMusicLink, strategyRequested = true, headlineVariant = 'A', sessionId, } = req.body;
-        if (!artistName || !email || !urgency || !biggestChallenge || !goldmineAnswer) {
+        const { artistName, projectName, email, urgency, biggestChallenge, goldmineAnswer, goldmineGoals, demoUrl, audioFileName, spotifyLink, appleMusicLink, strategyRequested = true, headlineVariant = 'A', sessionId, } = req.body;
+        const authUser = req.user;
+        const userEmail = String(email || authUser?.email || '').toLowerCase().trim();
+        const finalGoldmine = String(goldmineAnswer ||
+            (Array.isArray(goldmineGoals) ? goldmineGoals.join(', ') : goldmineGoals) ||
+            'Growth Strategy');
+        const finalArtist = String(artistName || authUser?.name || 'Artist');
+        const finalUrgency = urgency || 'WITHIN_2_WEEKS';
+        const finalChallenge = biggestChallenge || 'DONT_KNOW_WHAT_TO_DO';
+        if (!finalArtist || !userEmail || !finalUrgency || !finalChallenge || !finalGoldmine) {
             res.status(400).json({
                 success: false,
                 message: 'Required fields missing: artistName, email, urgency, biggestChallenge, goldmineAnswer',
             });
             return;
         }
-        const userEmail = String(email).toLowerCase().trim();
         const challengeMapping = {
             DONT_KNOW_AFTER_UPLOADING: 'DONT_KNOW_WHAT_TO_DO',
             KNOWING_WHEN_TO_RELEASE: 'WHEN_TO_RELEASE',
         };
-        const normalizedChallenge = challengeMapping[biggestChallenge] || biggestChallenge;
+        const normalizedChallenge = challengeMapping[finalChallenge] || finalChallenge;
+        // Generate unique 6-character access code
+        const uniqueInviteCode = 'OND' + Math.floor(100 + Math.random() * 900);
         const submission = await prisma_js_1.prisma.waitlistSubmission.create({
             data: {
-                artistName: String(artistName),
+                artistName: finalArtist,
                 email: userEmail,
-                urgency,
+                urgency: finalUrgency,
                 biggestChallenge: normalizedChallenge,
-                goldmineAnswer: String(goldmineAnswer),
+                goldmineAnswer: finalGoldmine,
                 demoUrl: demoUrl ? String(demoUrl) : null,
                 audioFileName: audioFileName ? String(audioFileName) : null,
                 spotifyLink: spotifyLink ? String(spotifyLink) : null,
@@ -77,8 +88,15 @@ async function submitWaitlist(req, res) {
                 strategyRequested: Boolean(strategyRequested),
                 headlineVariant: String(headlineVariant),
                 status: 'SUBMITTED',
+                shareToken: uniqueInviteCode,
             },
         });
+        const totalSubmissions = await prisma_js_1.prisma.waitlistSubmission.count();
+        const inferredTitle = audioFileName
+            ? String(audioFileName).replace(/\.[^/.]+$/, '')
+            : String(finalGoldmine).length < 40
+                ? String(finalGoldmine)
+                : `${String(finalArtist)} Release`;
         // Auto-create/link User, Artist & Song in DB so songs show up directly on the /releases page!
         try {
             let user = await prisma_js_1.prisma.user.findUnique({ where: { email: userEmail } });
@@ -86,7 +104,7 @@ async function submitWaitlist(req, res) {
                 user = await prisma_js_1.prisma.user.create({
                     data: {
                         email: userEmail,
-                        name: String(artistName),
+                        name: String(finalArtist),
                         isVerified: true,
                     },
                 });
@@ -105,16 +123,11 @@ async function submitWaitlist(req, res) {
                 artist = await prisma_js_1.prisma.artist.create({
                     data: {
                         userId: user.id,
-                        name: String(artistName),
+                        name: String(finalArtist),
                         genres: ['Afrobeats'],
                     },
                 });
             }
-            const inferredTitle = audioFileName
-                ? audioFileName.replace(/\.[^/.]+$/, '')
-                : String(goldmineAnswer).length < 40
-                    ? String(goldmineAnswer)
-                    : `${String(artistName)} Release`;
             const existingSong = await prisma_js_1.prisma.song.findFirst({
                 where: {
                     artistId: artist.id,
@@ -152,8 +165,8 @@ async function submitWaitlist(req, res) {
         catch (linkErr) {
             console.error('⚠️ [submitWaitlist] Failed to auto-create song record for releases page:', linkErr);
         }
-        // Dispatch instant waitlist confirmation email to artist
-        (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName).catch((err) => {
+        // Dispatch instant waitlist confirmation email with unique code to artist
+        (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName, uniqueInviteCode, totalSubmissions).catch((err) => {
             console.error('[sendWaitlistConfirmationEmail error]:', err);
         });
         // Link previous step logs to this submission if sessionId provided
@@ -163,14 +176,27 @@ async function submitWaitlist(req, res) {
                 data: { submissionId: submission.id },
             });
         }
+        // Auto-create backend Project folder for the artist's workspace
+        let createdProject = null;
+        try {
+            createdProject = await project_service_js_1.projectService.createProject(userEmail, projectName ? String(projectName).trim() : '', undefined, inferredTitle, audioFileName ? String(audioFileName) : undefined, demoUrl ? String(demoUrl) : undefined);
+        }
+        catch (projErr) {
+            console.error('⚠️ [submitWaitlist] Failed to auto-create project:', projErr);
+        }
         res.status(201).json({
             success: true,
-            message: "You're one of our first users! We will notify you when your account and strategy are ready.",
+            message: "Project folder created & waitlist submitted successfully!",
+            id: submission.id,
+            position: totalSubmissions,
+            inviteCode: uniqueInviteCode,
             submission: {
                 id: submission.id,
                 artistName: submission.artistName,
+                projectName: String(projectName || 'Untitled Project'),
                 shareToken: submission.shareToken,
             },
+            project: createdProject,
         });
     }
     catch (error) {
@@ -507,14 +533,77 @@ async function checkStatus(req, res) {
             },
             orderBy: { createdAt: 'desc' },
         });
+        const totalCount = await prisma_js_1.prisma.waitlistSubmission.count();
+        const isVerified = Boolean(submission &&
+            (submission.status === 'ACCEPTED' ||
+                submission.status === 'WEEKLY_ACTIVE' ||
+                submission.status === 'STRATEGY_DELIVERED' ||
+                submission.adminNotes === 'VERIFIED_CODE'));
         res.status(200).json({
             success: true,
             hasSubmitted: Boolean(submission),
+            isVerified,
+            position: totalCount,
+            inviteCode: submission?.shareToken || null,
             submission: submission || null,
         });
     }
     catch (error) {
         console.error('[checkStatus error]:', error);
         res.status(500).json({ success: false, message: 'Failed to check waitlist status' });
+    }
+}
+/**
+ * Public/Auth: Verify waitlist invite / access code
+ */
+async function verifyCode(req, res) {
+    try {
+        const { code, email } = req.body;
+        if (!code) {
+            res.status(400).json({ success: false, message: 'Invite code is required' });
+            return;
+        }
+        const cleanCode = String(code).trim().toUpperCase();
+        const validCodes = ['ONDEL1', 'ONDEL2026', 'VIP2026', 'EARLYACCESS', 'FOUNDER'];
+        const userEmail = email ? String(email).toLowerCase().trim() : req.user?.email;
+        const submission = await prisma_js_1.prisma.waitlistSubmission.findFirst({
+            where: {
+                OR: [
+                    { shareToken: cleanCode },
+                    ...(userEmail ? [{ email: { equals: userEmail, mode: 'insensitive' } }] : []),
+                ],
+            },
+        });
+        const isValid = validCodes.includes(cleanCode) || Boolean(submission);
+        if (isValid) {
+            if (submission) {
+                await prisma_js_1.prisma.waitlistSubmission.update({
+                    where: { id: submission.id },
+                    data: { status: 'ACCEPTED', adminNotes: 'VERIFIED_CODE' },
+                });
+            }
+            else if (userEmail) {
+                await prisma_js_1.prisma.waitlistSubmission.updateMany({
+                    where: { email: { equals: userEmail, mode: 'insensitive' } },
+                    data: { status: 'ACCEPTED', adminNotes: 'VERIFIED_CODE' },
+                });
+            }
+            res.status(200).json({
+                success: true,
+                verified: true,
+                redirectUrl: process.env.DASHBOARD_URL || 'http://localhost:5174',
+            });
+        }
+        else {
+            res.status(400).json({
+                success: false,
+                verified: false,
+                message: "That invite code is invalid. Please check and try again.",
+            });
+        }
+    }
+    catch (error) {
+        console.error('[verifyCode error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to verify invite code' });
     }
 }
