@@ -9,6 +9,7 @@ import {
   getStrategyByToken,
   getMyStrategy,
   checkStatus,
+  verifyCode,
   getAdminSubmissions,
   getAdminSubmissionById,
   saveAndDeliverStrategy,
@@ -55,6 +56,7 @@ router.post('/upload-demo', upload.single('demo'), uploadDemo);
 router.get('/strategy/:token', getStrategyByToken);
 router.get('/my-strategy', requireAuth, getMyStrategy);
 router.get('/check-status', checkStatus);
+router.post('/verify-code', verifyCode);
 
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', requireAdmin, getAdminSubmissions);
