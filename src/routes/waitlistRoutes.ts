@@ -16,7 +16,7 @@ import {
   createWeeklyOpportunity,
   getAnalyticsMetrics,
 } from '../controllers/waitlistController.js';
-import { requireAdmin, requireAuth } from '../middleware/authMiddleware.js';
+import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
@@ -51,12 +51,12 @@ const upload = multer({
 
 // --- Public / User Endpoints ---
 router.post('/log-step', logStep);
-router.post('/submit', submitWaitlist);
-router.post('/upload-demo', upload.single('demo'), uploadDemo);
+router.post('/submit', optionalAuth, submitWaitlist);
+router.post('/upload-demo', optionalAuth, upload.single('demo'), uploadDemo);
 router.get('/strategy/:token', getStrategyByToken);
 router.get('/my-strategy', requireAuth, getMyStrategy);
-router.get('/check-status', checkStatus);
-router.post('/verify-code', verifyCode);
+router.get('/check-status', optionalAuth, checkStatus);
+router.post('/verify-code', optionalAuth, verifyCode);
 
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', requireAdmin, getAdminSubmissions);

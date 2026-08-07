@@ -587,12 +587,23 @@ export async function checkStatus(req: Request, res: Response): Promise<void> {
   try {
     let emailToCheck = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
 
-    if (!emailToCheck && (req as any).user?.email) {
-      emailToCheck = String((req as any).user.email).toLowerCase().trim();
+    if (!emailToCheck && (req as any).user?.userId) {
+      const userRecord = await prisma.user.findUnique({ where: { id: (req as any).user.userId } });
+      if (userRecord?.email) {
+        emailToCheck = userRecord.email.toLowerCase().trim();
+      }
     }
 
     if (!emailToCheck) {
-      res.status(400).json({ success: false, message: 'Email query parameter required' });
+      const totalCount = await prisma.waitlistSubmission.count();
+      res.status(200).json({
+        success: true,
+        hasSubmitted: false,
+        isVerified: false,
+        position: totalCount,
+        inviteCode: null,
+        submission: null,
+      });
       return;
     }
 

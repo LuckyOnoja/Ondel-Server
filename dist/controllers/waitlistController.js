@@ -520,11 +520,22 @@ async function getMyStrategy(req, res) {
 async function checkStatus(req, res) {
     try {
         let emailToCheck = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
-        if (!emailToCheck && req.user?.email) {
-            emailToCheck = String(req.user.email).toLowerCase().trim();
+        if (!emailToCheck && req.user?.userId) {
+            const userRecord = await prisma_js_1.prisma.user.findUnique({ where: { id: req.user.userId } });
+            if (userRecord?.email) {
+                emailToCheck = userRecord.email.toLowerCase().trim();
+            }
         }
         if (!emailToCheck) {
-            res.status(400).json({ success: false, message: 'Email query parameter required' });
+            const totalCount = await prisma_js_1.prisma.waitlistSubmission.count();
+            res.status(200).json({
+                success: true,
+                hasSubmitted: false,
+                isVerified: false,
+                position: totalCount,
+                inviteCode: null,
+                submission: null,
+            });
             return;
         }
         const submission = await prisma_js_1.prisma.waitlistSubmission.findFirst({
