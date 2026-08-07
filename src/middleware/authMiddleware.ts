@@ -31,6 +31,20 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   }
 }
 
+export function optionalAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, env.JWT_SECRET) as AuthenticatedUser;
+      req.user = decoded;
+    }
+  } catch (error) {
+    /* ignore invalid token on optional auth */
+  }
+  next();
+}
+
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (!req.user?.isAdmin) {
