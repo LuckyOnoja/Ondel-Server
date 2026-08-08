@@ -214,7 +214,8 @@ class ProjectService {
             where: { userId: user.id },
         });
         const gradientSignature = gradient || (await this.getUniqueProjectGradient(user.id));
-        const projectName = name && name.trim() ? name.trim() : 'Untitled Project';
+        const defaultName = existingUserProjectsCount === 0 ? 'Untitled Project' : `Untitled Project ${existingUserProjectsCount + 1}`;
+        const projectName = name && name.trim() ? name.trim() : defaultName;
         const newProject = await prisma_js_1.prisma.project.create({
             data: {
                 userId: user.id,
