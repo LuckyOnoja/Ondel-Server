@@ -138,7 +138,7 @@ export class ProjectService {
       const defaultProject = await prisma.project.create({
         data: {
           userId: user.id,
-          name: 'Untitled Project 1',
+          name: 'Untitled Project',
           gradient: GRADIENT_PRESETS[0],
           status: 'ACTIVE',
         },
@@ -232,7 +232,8 @@ export class ProjectService {
     const gradientSignature =
       gradient || (await this.getUniqueProjectGradient(user.id))
 
-    const projectName = name && name.trim() ? name.trim() : `Untitled Project ${existingUserProjectsCount + 1}`
+    const defaultName = existingUserProjectsCount === 0 ? 'Untitled Project' : `Untitled Project ${existingUserProjectsCount + 1}`
+    const projectName = name && name.trim() ? name.trim() : defaultName
 
     const newProject = await prisma.project.create({
       data: {
