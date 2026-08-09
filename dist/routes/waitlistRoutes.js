@@ -48,7 +48,10 @@ router.post('/verify-code', authMiddleware_js_1.optionalAuth, waitlistController
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissions);
 router.get('/admin/submissions/:id', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissionById);
+router.post('/admin/submissions/:id/send-code', authMiddleware_js_1.requireAdmin, waitlistController_js_1.sendWaitlistCode);
 router.post('/admin/submissions/:id/strategy', authMiddleware_js_1.requireAdmin, waitlistController_js_1.saveAndDeliverStrategy);
 router.post('/admin/submissions/:id/weekly-opportunity', authMiddleware_js_1.requireAdmin, waitlistController_js_1.createWeeklyOpportunity);
 router.get('/admin/analytics', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAnalyticsMetrics);
+router.get('/admin/analysis-breakdown', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAnalysisBreakdown);
+router.get('/admin/songs', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSongs);
 exports.default = router;

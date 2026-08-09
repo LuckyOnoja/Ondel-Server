@@ -15,6 +15,9 @@ import {
   saveAndDeliverStrategy,
   createWeeklyOpportunity,
   getAnalyticsMetrics,
+  sendWaitlistCode,
+  getAnalysisBreakdown,
+  getAdminSongs,
 } from '../controllers/waitlistController.js';
 import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 
@@ -61,8 +64,11 @@ router.post('/verify-code', optionalAuth, verifyCode);
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', requireAdmin, getAdminSubmissions);
 router.get('/admin/submissions/:id', requireAdmin, getAdminSubmissionById);
+router.post('/admin/submissions/:id/send-code', requireAdmin, sendWaitlistCode);
 router.post('/admin/submissions/:id/strategy', requireAdmin, saveAndDeliverStrategy);
 router.post('/admin/submissions/:id/weekly-opportunity', requireAdmin, createWeeklyOpportunity);
 router.get('/admin/analytics', requireAdmin, getAnalyticsMetrics);
+router.get('/admin/analysis-breakdown', requireAdmin, getAnalysisBreakdown);
+router.get('/admin/songs', requireAdmin, getAdminSongs);
 
 export default router;

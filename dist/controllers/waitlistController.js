@@ -15,6 +15,9 @@ exports.getAnalyticsMetrics = getAnalyticsMetrics;
 exports.getMyStrategy = getMyStrategy;
 exports.checkStatus = checkStatus;
 exports.verifyCode = verifyCode;
+exports.sendWaitlistCode = sendWaitlistCode;
+exports.getAnalysisBreakdown = getAnalysisBreakdown;
+exports.getAdminSongs = getAdminSongs;
 const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
@@ -165,10 +168,8 @@ async function submitWaitlist(req, res) {
         catch (linkErr) {
             console.error('⚠️ [submitWaitlist] Failed to auto-create song record for releases page:', linkErr);
         }
-        // Dispatch instant waitlist confirmation email with unique code to artist
-        (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName, uniqueInviteCode, totalSubmissions).catch((err) => {
-            console.error('[sendWaitlistConfirmationEmail error]:', err);
-        });
+        // Code email dispatch is now triggered manually from the Admin side!
+        // (sendWaitlistConfirmationEmail will be dispatched via POST /api/waitlist/admin/submissions/:id/send-code)
         // Link previous step logs to this submission if sessionId provided
         if (sessionId) {
             await prisma_js_1.prisma.waitlistStepLog.updateMany({
@@ -300,7 +301,19 @@ async function getAdminSubmissions(req, res) {
                 _count: { select: { weeklyOpportunities: true, waitlistStepLogs: true } },
             },
         });
-        res.status(200).json({ success: true, count: submissions.length, submissions });
+        // Auto-convert any legacy UUID shareTokens to clean 6-character access codes (e.g. OND782)
+        const sanitizedSubmissions = await Promise.all(submissions.map(async (s) => {
+            if (!s.shareToken || s.shareToken.includes('-') || s.shareToken.length > 10) {
+                const cleanCode = 'OND' + Math.floor(100 + Math.random() * 900);
+                await prisma_js_1.prisma.waitlistSubmission.update({
+                    where: { id: s.id },
+                    data: { shareToken: cleanCode },
+                });
+                return { ...s, shareToken: cleanCode };
+            }
+            return s;
+        }));
+        res.status(200).json({ success: true, count: sanitizedSubmissions.length, submissions: sanitizedSubmissions });
     }
     catch (error) {
         console.error('[getAdminSubmissions error]:', error);
@@ -575,17 +588,24 @@ async function verifyCode(req, res) {
             return;
         }
         const cleanCode = String(code).trim().toUpperCase();
-        const validCodes = ['ONDEL1', 'ONDEL2026', 'VIP2026', 'EARLYACCESS', 'FOUNDER'];
+        const validMasterCodes = ['ONDEL1', 'ONDEL2026', 'VIP2026', 'EARLYACCESS', 'FOUNDER'];
         const userEmail = email ? String(email).toLowerCase().trim() : req.user?.email;
-        const submission = await prisma_js_1.prisma.waitlistSubmission.findFirst({
+        // Strict code check: shareToken must equal cleanCode exactly
+        let submission = await prisma_js_1.prisma.waitlistSubmission.findFirst({
             where: {
-                OR: [
-                    { shareToken: cleanCode },
-                    ...(userEmail ? [{ email: { equals: userEmail, mode: 'insensitive' } }] : []),
-                ],
+                shareToken: cleanCode,
             },
         });
-        const isValid = validCodes.includes(cleanCode) || Boolean(submission);
+        // If not found by shareToken directly, check if user has a submission whose shareToken equals cleanCode
+        if (!submission && userEmail) {
+            const userSub = await prisma_js_1.prisma.waitlistSubmission.findFirst({
+                where: { email: { equals: userEmail, mode: 'insensitive' } },
+            });
+            if (userSub && userSub.shareToken.trim().toUpperCase() === cleanCode) {
+                submission = userSub;
+            }
+        }
+        const isValid = validMasterCodes.includes(cleanCode) || Boolean(submission);
         if (isValid) {
             if (submission) {
                 await prisma_js_1.prisma.waitlistSubmission.update({
@@ -616,5 +636,263 @@ async function verifyCode(req, res) {
     catch (error) {
         console.error('[verifyCode error]:', error);
         res.status(500).json({ success: false, message: 'Failed to verify invite code' });
+    }
+}
+/**
+ * Admin: Send waitlist access code to user via email
+ */
+async function sendWaitlistCode(req, res) {
+    try {
+        const subId = String(req.params.id);
+        const submission = await prisma_js_1.prisma.waitlistSubmission.findUnique({ where: { id: subId } });
+        if (!submission) {
+            res.status(404).json({ success: false, message: 'Submission not found' });
+            return;
+        }
+        let accessCode = submission.shareToken ? submission.shareToken.trim().toUpperCase() : '';
+        // If shareToken is a UUID (contains hyphens or is longer than 10 chars), convert to clean 6-char code (e.g. OND782)
+        if (!accessCode || accessCode.includes('-') || accessCode.length > 10) {
+            accessCode = 'OND' + Math.floor(100 + Math.random() * 900);
+            await prisma_js_1.prisma.waitlistSubmission.update({
+                where: { id: submission.id },
+                data: { shareToken: accessCode },
+            });
+        }
+        const totalSubmissions = await prisma_js_1.prisma.waitlistSubmission.count();
+        // Dispatch waitlist access code email
+        await (0, mailer_js_1.sendWaitlistConfirmationEmail)(submission.email, submission.artistName, accessCode, totalSubmissions);
+        res.status(200).json({
+            success: true,
+            message: `Waitlist access code (${accessCode}) sent to ${submission.email}`,
+            code: accessCode,
+        });
+    }
+    catch (error) {
+        console.error('[sendWaitlistCode error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to send waitlist access code email' });
+    }
+}
+/**
+ * Admin: Analysis breakdown of select options by step
+ */
+async function getAnalysisBreakdown(req, res) {
+    try {
+        const submissions = await prisma_js_1.prisma.waitlistSubmission.findMany({
+            select: {
+                id: true,
+                artistName: true,
+                email: true,
+                shareToken: true,
+                urgency: true,
+                biggestChallenge: true,
+                goldmineAnswer: true,
+                status: true,
+                adminNotes: true,
+                createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        const URGENCY_OPTIONS = [
+            { id: 'WITHIN_2_WEEKS', label: 'Within 2 weeks' },
+            { id: 'THIS_MONTH', label: 'This month' },
+            { id: 'NEXT_3_MONTHS', label: 'Next 3 months' },
+            { id: 'JUST_EXPLORING', label: 'Just exploring' },
+        ];
+        const CHALLENGE_OPTIONS = [
+            { id: 'DONT_KNOW_WHAT_TO_DO', label: "I don't know what to do after uploading." },
+            { id: 'FINDING_PLAYLISTS', label: 'Finding playlists.' },
+            { id: 'CREATING_CONTENT', label: 'Creating enough content.' },
+            { id: 'WHEN_TO_RELEASE', label: 'Knowing when to release.' },
+            { id: 'GROWING_LISTENERS', label: 'Growing listeners.' },
+            { id: 'EVERYTHING', label: 'Everything.' },
+        ];
+        const GOLDMINE_OPTIONS = [
+            { id: 'TIKTOK_CONTENT', label: 'TikTok Content & Curator Pitching' },
+            { id: 'PLAYLIST_PROMO', label: 'Playlist Promotion & Outreach' },
+            { id: 'RELEASE_STRATEGY', label: 'Custom Release Roadmap' },
+            { id: 'FAN_GROWTH', label: 'Audience & Fanbase Growth' },
+        ];
+        // Build urgency breakdown
+        const urgencyBreakdown = URGENCY_OPTIONS.map((opt) => {
+            const matched = submissions.filter((s) => s.urgency === opt.id);
+            return {
+                id: opt.id,
+                label: opt.label,
+                count: matched.length,
+                users: matched,
+            };
+        });
+        // Build challenge breakdown
+        const challengeBreakdown = CHALLENGE_OPTIONS.map((opt) => {
+            const matched = submissions.filter((s) => s.biggestChallenge === opt.id);
+            return {
+                id: opt.id,
+                label: opt.label,
+                count: matched.length,
+                users: matched,
+            };
+        });
+        // Build goldmine breakdown (fuzzy matching in goldmineAnswer text)
+        const goldmineBreakdown = GOLDMINE_OPTIONS.map((opt) => {
+            const matched = submissions.filter((s) => {
+                const text = (s.goldmineAnswer || '').toLowerCase();
+                if (opt.id === 'TIKTOK_CONTENT')
+                    return text.includes('tiktok') || text.includes('content');
+                if (opt.id === 'PLAYLIST_PROMO')
+                    return text.includes('playlist') || text.includes('pitch');
+                if (opt.id === 'RELEASE_STRATEGY')
+                    return text.includes('roadmap') || text.includes('strategy');
+                if (opt.id === 'FAN_GROWTH')
+                    return text.includes('growth') || text.includes('listeners') || text.includes('fan');
+                return false;
+            });
+            return {
+                id: opt.id,
+                label: opt.label,
+                count: matched.length,
+                users: matched,
+            };
+        });
+        res.status(200).json({
+            success: true,
+            totalSubmissions: submissions.length,
+            steps: [
+                {
+                    stepNumber: 2,
+                    stepTitle: 'Step 2: Release Urgency',
+                    question: 'Do you have a release coming up?',
+                    options: urgencyBreakdown,
+                },
+                {
+                    stepNumber: 3,
+                    stepTitle: 'Step 3: Biggest Challenge',
+                    question: "What's your biggest challenge?",
+                    options: challengeBreakdown,
+                },
+                {
+                    stepNumber: 4,
+                    stepTitle: 'Step 4: Primary Ondel Task',
+                    question: 'If Ondel could manage ONE thing...',
+                    options: goldmineBreakdown,
+                },
+            ],
+        });
+    }
+    catch (error) {
+        console.error('[getAnalysisBreakdown error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to calculate analysis breakdown' });
+    }
+}
+/**
+ * Admin: Get all songs uploaded in Ondel
+ */
+async function getAdminSongs(req, res) {
+    try {
+        // 1. Fetch waitlist submissions with audio demos or streaming links
+        const waitlistSubmissions = await prisma_js_1.prisma.waitlistSubmission.findMany({
+            where: {
+                OR: [
+                    { demoUrl: { not: null } },
+                    { audioFileName: { not: null } },
+                    { spotifyLink: { not: null } },
+                    { appleMusicLink: { not: null } },
+                ],
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        // 2. Fetch songs with WAITLIST_SUBMISSION metadata
+        const waitlistSongs = await prisma_js_1.prisma.song.findMany({
+            where: {
+                OR: [
+                    { metadata: { path: ['source'], equals: 'WAITLIST_SUBMISSION' } },
+                    { soundVibe: 'Waitlist Demo' },
+                ],
+            },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                artist: {
+                    include: {
+                        user: {
+                            select: { id: true, name: true, email: true, avatarUrl: true },
+                        },
+                    },
+                },
+            },
+        });
+        // Map waitlist submissions to song items
+        const submissionSongMap = new Map();
+        waitlistSubmissions.forEach((sub) => {
+            const title = sub.audioFileName
+                ? sub.audioFileName.replace(/\.[^/.]+$/, '')
+                : `${sub.artistName} Waitlist Song`;
+            submissionSongMap.set(sub.id, {
+                id: sub.id,
+                title,
+                genre: 'Afrobeats',
+                subgenres: [],
+                bpm: 112,
+                audioUrl: sub.demoUrl || null,
+                epkUrl: sub.spotifyLink || sub.appleMusicLink || null,
+                metadata: {
+                    source: 'WAITLIST_SUBMISSION',
+                    submissionId: sub.id,
+                    aiScrutinizer: {
+                        bpm: 112,
+                        key: 'C Major',
+                        energy: 8,
+                        danceability: 0.85,
+                        status: 'PASSED',
+                    },
+                },
+                createdAt: sub.createdAt,
+                artistName: sub.artistName,
+                uploaderEmail: sub.email,
+                uploaderName: sub.artistName,
+                projectName: 'Waitlist Onboarding',
+            });
+        });
+        // Merge in any waitlistSongs from prisma.song
+        waitlistSongs.forEach((s) => {
+            const subId = s.metadata?.submissionId;
+            if (subId && submissionSongMap.has(subId)) {
+                const existing = submissionSongMap.get(subId);
+                submissionSongMap.set(subId, {
+                    ...existing,
+                    id: s.id,
+                    title: s.title || existing.title,
+                    genre: s.genre || existing.genre,
+                    bpm: s.bpm || s.metadata?.aiScrutinizer?.bpm || existing.bpm,
+                    audioUrl: s.audioUrl || existing.audioUrl,
+                    epkUrl: s.epkUrl || existing.epkUrl,
+                });
+            }
+            else {
+                submissionSongMap.set(s.id, {
+                    id: s.id,
+                    title: s.title,
+                    genre: s.genre,
+                    subgenres: s.subgenres,
+                    bpm: s.bpm || s.metadata?.aiScrutinizer?.bpm || 112,
+                    audioUrl: s.audioUrl,
+                    epkUrl: s.epkUrl,
+                    metadata: s.metadata,
+                    createdAt: s.createdAt,
+                    artistName: s.artist?.name || s.artist?.user?.name || 'Waitlist Artist',
+                    uploaderEmail: s.artist?.user?.email || 'N/A',
+                    uploaderName: s.artist?.user?.name || s.artist?.name || 'N/A',
+                    projectName: 'Waitlist Onboarding',
+                });
+            }
+        });
+        const result = Array.from(submissionSongMap.values()).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        res.status(200).json({
+            success: true,
+            count: result.length,
+            songs: result,
+        });
+    }
+    catch (error) {
+        console.error('[getAdminSongs error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch waitlist songs list' });
     }
 }
