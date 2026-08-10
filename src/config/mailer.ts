@@ -3,21 +3,25 @@ import { env } from './env.js';
 import { buildOndelEmailTemplate } from '../utils/email-template.js';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: env.SMTP_HOST,
+  port: env.SMTP_PORT,
+  secure: env.SMTP_PORT === 465, // true for port 465, false for 587
   auth: {
-    user: env.EMAIL_USER,
-    pass: env.EMAIL_PASSWORD,
+    user: env.SMTP_USER,
+    pass: env.SMTP_PASS,
   },
 });
 
+const getFromAddress = (name: string) => `"${name}" <${env.SMTP_USER}>`;
+
 export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolean> {
-  const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
+  const isConfigured = Boolean(env.SMTP_USER && env.SMTP_PASS);
 
   if (!isConfigured) {
     console.log(`
   =============================================================
   📬 [DEVELOPMENT MAIL] OTP for ${toEmail}: ${otp}
-  (Add real EMAIL_PASSWORD to .env to deliver real emails)
+  (Add real SMTP_PASS to .env to deliver real emails)
   =============================================================
     `);
     return true;
@@ -45,7 +49,7 @@ export async function sendOtpEmail(toEmail: string, otp: string): Promise<boolea
 
   try {
     await transporter.sendMail({
-      from: `"Ondel Music" <${env.EMAIL_USER}>`,
+      from: getFromAddress('Ondel Music'),
       to: toEmail,
       subject: `Your Ondel Verification Code: ${otp}`,
       html,
@@ -65,7 +69,7 @@ export async function sendWaitlistConfirmationEmail(
   inviteCode?: string,
   position?: number
 ): Promise<boolean> {
-  const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
+  const isConfigured = Boolean(env.SMTP_USER && env.SMTP_PASS);
   const codeStr = inviteCode || 'OND2026';
   const posStr = position ? `#${position}` : '';
 
@@ -102,7 +106,7 @@ export async function sendWaitlistConfirmationEmail(
 
   try {
     await transporter.sendMail({
-      from: `"Ondel Team" <${env.EMAIL_USER}>`,
+      from: getFromAddress('Ondel Team'),
       to: toEmail,
       subject: `Your Ondel Access Code: ${codeStr} ${posStr}`,
       html,
@@ -116,7 +120,7 @@ export async function sendWaitlistConfirmationEmail(
 }
 
 export async function sendStrategyDeliveredEmail(toEmail: string, artistName: string, shareToken: string): Promise<boolean> {
-  const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
+  const isConfigured = Boolean(env.SMTP_USER && env.SMTP_PASS);
   const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
 
   if (!isConfigured) {
@@ -142,7 +146,7 @@ export async function sendStrategyDeliveredEmail(toEmail: string, artistName: st
 
   try {
     await transporter.sendMail({
-      from: `"Ondie AI Manager" <${env.EMAIL_USER}>`,
+      from: getFromAddress('Ondie AI Manager'),
       to: toEmail,
       subject: `Your Ondel Personalised Release Strategy is Ready`,
       html,
@@ -156,7 +160,7 @@ export async function sendStrategyDeliveredEmail(toEmail: string, artistName: st
 }
 
 export async function sendWeeklyOpportunityEmail(toEmail: string, artistName: string, updateTitle: string, shareToken: string): Promise<boolean> {
-  const isConfigured = Boolean(env.EMAIL_USER && env.EMAIL_PASSWORD);
+  const isConfigured = Boolean(env.SMTP_USER && env.SMTP_PASS);
   const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
 
   if (!isConfigured) {
@@ -183,7 +187,7 @@ export async function sendWeeklyOpportunityEmail(toEmail: string, artistName: st
 
   try {
     await transporter.sendMail({
-      from: `"Ondie AI Manager" <${env.EMAIL_USER}>`,
+      from: getFromAddress('Ondie AI Manager'),
       to: toEmail,
       subject: `Ondel Update: ${updateTitle}`,
       html,
