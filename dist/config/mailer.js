@@ -11,19 +11,22 @@ const nodemailer_1 = __importDefault(require("nodemailer"));
 const env_js_1 = require("./env.js");
 const email_template_js_1 = require("../utils/email-template.js");
 const transporter = nodemailer_1.default.createTransport({
-    service: 'gmail',
+    host: env_js_1.env.SMTP_HOST,
+    port: env_js_1.env.SMTP_PORT,
+    secure: env_js_1.env.SMTP_PORT === 465, // true for port 465, false for 587
     auth: {
-        user: env_js_1.env.EMAIL_USER,
-        pass: env_js_1.env.EMAIL_PASSWORD,
+        user: env_js_1.env.SMTP_USER,
+        pass: env_js_1.env.SMTP_PASS,
     },
 });
+const getFromAddress = (name) => `"${name}" <${env_js_1.env.SMTP_USER}>`;
 async function sendOtpEmail(toEmail, otp) {
-    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const isConfigured = Boolean(env_js_1.env.SMTP_USER && env_js_1.env.SMTP_PASS);
     if (!isConfigured) {
         console.log(`
   =============================================================
   📬 [DEVELOPMENT MAIL] OTP for ${toEmail}: ${otp}
-  (Add real EMAIL_PASSWORD to .env to deliver real emails)
+  (Add real SMTP_PASS to .env to deliver real emails)
   =============================================================
     `);
         return true;
@@ -48,7 +51,7 @@ async function sendOtpEmail(toEmail, otp) {
     });
     try {
         await transporter.sendMail({
-            from: `"Ondel Music" <${env_js_1.env.EMAIL_USER}>`,
+            from: getFromAddress('Ondel Music'),
             to: toEmail,
             subject: `Your Ondel Verification Code: ${otp}`,
             html,
@@ -63,7 +66,7 @@ async function sendOtpEmail(toEmail, otp) {
     }
 }
 async function sendWaitlistConfirmationEmail(toEmail, artistName, inviteCode, position) {
-    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const isConfigured = Boolean(env_js_1.env.SMTP_USER && env_js_1.env.SMTP_PASS);
     const codeStr = inviteCode || 'OND2026';
     const posStr = position ? `#${position}` : '';
     if (!isConfigured) {
@@ -97,7 +100,7 @@ async function sendWaitlistConfirmationEmail(toEmail, artistName, inviteCode, po
     });
     try {
         await transporter.sendMail({
-            from: `"Ondel Team" <${env_js_1.env.EMAIL_USER}>`,
+            from: getFromAddress('Ondel Team'),
             to: toEmail,
             subject: `Your Ondel Access Code: ${codeStr} ${posStr}`,
             html,
@@ -111,7 +114,7 @@ async function sendWaitlistConfirmationEmail(toEmail, artistName, inviteCode, po
     }
 }
 async function sendStrategyDeliveredEmail(toEmail, artistName, shareToken) {
-    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const isConfigured = Boolean(env_js_1.env.SMTP_USER && env_js_1.env.SMTP_PASS);
     const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
     if (!isConfigured) {
         console.log(`
@@ -134,7 +137,7 @@ async function sendStrategyDeliveredEmail(toEmail, artistName, shareToken) {
     });
     try {
         await transporter.sendMail({
-            from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
+            from: getFromAddress('Ondie AI Manager'),
             to: toEmail,
             subject: `Your Ondel Personalised Release Strategy is Ready`,
             html,
@@ -148,7 +151,7 @@ async function sendStrategyDeliveredEmail(toEmail, artistName, shareToken) {
     }
 }
 async function sendWeeklyOpportunityEmail(toEmail, artistName, updateTitle, shareToken) {
-    const isConfigured = Boolean(env_js_1.env.EMAIL_USER && env_js_1.env.EMAIL_PASSWORD);
+    const isConfigured = Boolean(env_js_1.env.SMTP_USER && env_js_1.env.SMTP_PASS);
     const strategyUrl = `${process.env.APP_URL || 'http://localhost:8000'}/strategy/${shareToken}`;
     if (!isConfigured) {
         console.log(`
@@ -172,7 +175,7 @@ async function sendWeeklyOpportunityEmail(toEmail, artistName, updateTitle, shar
     });
     try {
         await transporter.sendMail({
-            from: `"Ondie AI Manager" <${env_js_1.env.EMAIL_USER}>`,
+            from: getFromAddress('Ondie AI Manager'),
             to: toEmail,
             subject: `Ondel Update: ${updateTitle}`,
             html,
