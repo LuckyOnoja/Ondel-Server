@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logStep = logStep;
+exports.saveStepDraft = saveStepDraft;
+exports.getDraft = getDraft;
 exports.submitWaitlist = submitWaitlist;
 exports.uploadDemo = uploadDemo;
 exports.getStrategyByToken = getStrategyByToken;
@@ -18,6 +20,7 @@ exports.verifyCode = verifyCode;
 exports.sendWaitlistCode = sendWaitlistCode;
 exports.getAnalysisBreakdown = getAnalysisBreakdown;
 exports.getAdminSongs = getAdminSongs;
+exports.getAdminDrafts = getAdminDrafts;
 const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
@@ -47,6 +50,109 @@ async function logStep(req, res) {
     catch (error) {
         console.error('[logStep error]:', error);
         res.status(500).json({ success: false, message: 'Failed to log waitlist step' });
+    }
+}
+/**
+ * Public/Auth: Save waitlist step draft for account
+ */
+async function saveStepDraft(req, res) {
+    try {
+        const authUser = req.user;
+        const bodyEmail = req.body.email || req.body.data?.email;
+        const sessionId = req.body.sessionId || req.headers['x-session-id'];
+        let emailToUse = String(authUser?.email || bodyEmail || '').toLowerCase().trim();
+        if (!emailToUse && sessionId) {
+            emailToUse = `anon_${sessionId}@draft.ondel.com`;
+        }
+        let userId = authUser?.userId;
+        if (!userId && emailToUse) {
+            let user = await prisma_js_1.prisma.user.findUnique({ where: { email: emailToUse } });
+            if (!user) {
+                user = await prisma_js_1.prisma.user.create({
+                    data: {
+                        email: emailToUse,
+                        name: req.body.data?.artistName || 'Waitlist User',
+                        isVerified: false,
+                    },
+                });
+            }
+            userId = user.id;
+        }
+        if (!userId) {
+            res.status(400).json({ success: false, message: 'User account or email required to save draft' });
+            return;
+        }
+        const { stepNumber, stepName, data, metadata } = req.body;
+        const step = Number(stepNumber || 1);
+        const incomingData = data || metadata || {};
+        const existingDraft = await prisma_js_1.prisma.waitlistDraft.findUnique({
+            where: { userId },
+        });
+        const currentData = existingDraft?.data || {};
+        const updatedData = { ...currentData, ...incomingData };
+        const currentCompleted = existingDraft?.completedSteps || [];
+        const completedSteps = Array.from(new Set([...currentCompleted, step]));
+        const draft = await prisma_js_1.prisma.waitlistDraft.upsert({
+            where: { userId },
+            update: {
+                currentStep: step,
+                data: updatedData,
+                completedSteps,
+            },
+            create: {
+                userId,
+                currentStep: step,
+                data: updatedData,
+                completedSteps,
+            },
+        });
+        // Also log to WaitlistStepLog if sessionId is provided
+        if (sessionId || stepName) {
+            await prisma_js_1.prisma.waitlistStepLog.create({
+                data: {
+                    sessionId: String(sessionId || userId),
+                    variant: 'waitlist-lab',
+                    stepNumber: step,
+                    stepName: String(stepName || `STEP_${step}`),
+                    metadata: incomingData,
+                },
+            }).catch(() => { });
+        }
+        res.status(200).json({ success: true, draft });
+    }
+    catch (error) {
+        console.error('[saveStepDraft error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to save waitlist draft' });
+    }
+}
+/**
+ * Public/Auth: Get waitlist draft for account
+ */
+async function getDraft(req, res) {
+    try {
+        const authUser = req.user;
+        let email = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
+        if (!email && authUser?.email) {
+            email = authUser.email.toLowerCase().trim();
+        }
+        let userId = authUser?.userId;
+        if (!userId && email) {
+            const user = await prisma_js_1.prisma.user.findUnique({ where: { email } });
+            if (user)
+                userId = user.id;
+        }
+        if (!userId) {
+            res.status(200).json({ success: true, draft: null });
+            return;
+        }
+        const draft = await prisma_js_1.prisma.waitlistDraft.findUnique({
+            where: { userId },
+        });
+        res.status(200).json({ success: true, draft });
+    }
+    catch (error) {
+        console.error('[getDraft error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch waitlist draft' });
     }
 }
 /**
@@ -119,6 +225,8 @@ async function submitWaitlist(req, res) {
                     },
                 });
             }
+            // Delete waitlist draft if exists for user upon submission
+            await prisma_js_1.prisma.waitlistDraft.deleteMany({ where: { userId: user.id } }).catch(() => { });
             let artist = await prisma_js_1.prisma.artist.findFirst({
                 where: { userId: user.id },
             });
@@ -894,5 +1002,29 @@ async function getAdminSongs(req, res) {
     catch (error) {
         console.error('[getAdminSongs error]:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch waitlist songs list' });
+    }
+}
+/**
+ * Admin: Get all waitlist drafts (uncompleted step drop-offs)
+ */
+async function getAdminDrafts(req, res) {
+    try {
+        const drafts = await prisma_js_1.prisma.waitlistDraft.findMany({
+            orderBy: { updatedAt: 'desc' },
+            include: {
+                user: {
+                    select: { id: true, email: true, name: true },
+                },
+            },
+        });
+        res.status(200).json({
+            success: true,
+            count: drafts.length,
+            drafts,
+        });
+    }
+    catch (error) {
+        console.error('[getAdminDrafts error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch admin waitlist drafts' });
     }
 }

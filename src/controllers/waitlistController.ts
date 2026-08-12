@@ -36,6 +36,126 @@ export async function logStep(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * Public/Auth: Save waitlist step draft for account
+ */
+export async function saveStepDraft(req: Request, res: Response): Promise<void> {
+  try {
+    const authUser = (req as AuthRequest).user;
+    const bodyEmail = req.body.email || req.body.data?.email;
+    const sessionId = req.body.sessionId || req.headers['x-session-id'];
+
+    let emailToUse = String(authUser?.email || bodyEmail || '').toLowerCase().trim();
+
+    if (!emailToUse && sessionId) {
+      emailToUse = `anon_${sessionId}@draft.ondel.com`;
+    }
+
+    let userId = authUser?.userId;
+
+    if (!userId && emailToUse) {
+      let user = await prisma.user.findUnique({ where: { email: emailToUse } });
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            email: emailToUse,
+            name: req.body.data?.artistName || 'Waitlist User',
+            isVerified: false,
+          },
+        });
+      }
+      userId = user.id;
+    }
+
+    if (!userId) {
+      res.status(400).json({ success: false, message: 'User account or email required to save draft' });
+      return;
+    }
+
+    const { stepNumber, stepName, data, metadata } = req.body;
+    const step = Number(stepNumber || 1);
+    const incomingData = data || metadata || {};
+
+    const existingDraft = await prisma.waitlistDraft.findUnique({
+      where: { userId },
+    });
+
+    const currentData = (existingDraft?.data as Record<string, any>) || {};
+    const updatedData = { ...currentData, ...incomingData };
+
+    const currentCompleted = existingDraft?.completedSteps || [];
+    const completedSteps = Array.from(new Set([...currentCompleted, step]));
+
+    const draft = await prisma.waitlistDraft.upsert({
+      where: { userId },
+      update: {
+        currentStep: step,
+        data: updatedData,
+        completedSteps,
+      },
+      create: {
+        userId,
+        currentStep: step,
+        data: updatedData,
+        completedSteps,
+      },
+    });
+
+    // Also log to WaitlistStepLog if sessionId is provided
+    if (sessionId || stepName) {
+      await prisma.waitlistStepLog.create({
+        data: {
+          sessionId: String(sessionId || userId),
+          variant: 'waitlist-lab',
+          stepNumber: step,
+          stepName: String(stepName || `STEP_${step}`),
+          metadata: incomingData,
+        },
+      }).catch(() => {});
+    }
+
+    res.status(200).json({ success: true, draft });
+  } catch (error: any) {
+    console.error('[saveStepDraft error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to save waitlist draft' });
+  }
+}
+
+/**
+ * Public/Auth: Get waitlist draft for account
+ */
+export async function getDraft(req: Request, res: Response): Promise<void> {
+  try {
+    const authUser = (req as AuthRequest).user;
+    let email = req.query.email ? String(req.query.email).toLowerCase().trim() : '';
+
+    if (!email && authUser?.email) {
+      email = authUser.email.toLowerCase().trim();
+    }
+
+    let userId = authUser?.userId;
+
+    if (!userId && email) {
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (user) userId = user.id;
+    }
+
+    if (!userId) {
+      res.status(200).json({ success: true, draft: null });
+      return;
+    }
+
+    const draft = await prisma.waitlistDraft.findUnique({
+      where: { userId },
+    });
+
+    res.status(200).json({ success: true, draft });
+  } catch (error: any) {
+    console.error('[getDraft error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch waitlist draft' });
+  }
+}
+
+/**
  * Public: Submit complete 6-step waitlist form
  */
 export async function submitWaitlist(req: Request, res: Response): Promise<void> {
@@ -131,6 +251,9 @@ export async function submitWaitlist(req: Request, res: Response): Promise<void>
           },
         });
       }
+
+      // Delete waitlist draft if exists for user upon submission
+      await prisma.waitlistDraft.deleteMany({ where: { userId: user.id } }).catch(() => {});
 
       let artist = await prisma.artist.findFirst({
         where: { userId: user.id },
@@ -993,6 +1116,31 @@ export async function getAdminSongs(req: AuthRequest, res: Response): Promise<vo
   } catch (error: any) {
     console.error('[getAdminSongs error]:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch waitlist songs list' });
+  }
+}
+
+/**
+ * Admin: Get all waitlist drafts (uncompleted step drop-offs)
+ */
+export async function getAdminDrafts(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const drafts = await prisma.waitlistDraft.findMany({
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: {
+          select: { id: true, email: true, name: true },
+        },
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      count: drafts.length,
+      drafts,
+    });
+  } catch (error: any) {
+    console.error('[getAdminDrafts error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch admin waitlist drafts' });
   }
 }
 

@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import {
   logStep,
+  saveStepDraft,
+  getDraft,
   submitWaitlist,
   uploadDemo,
   getStrategyByToken,
@@ -18,6 +20,7 @@ import {
   sendWaitlistCode,
   getAnalysisBreakdown,
   getAdminSongs,
+  getAdminDrafts,
 } from '../controllers/waitlistController.js';
 import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 
@@ -54,6 +57,8 @@ const upload = multer({
 
 // --- Public / User Endpoints ---
 router.post('/log-step', logStep);
+router.post('/save-step', optionalAuth, saveStepDraft);
+router.get('/draft', optionalAuth, getDraft);
 router.post('/submit', optionalAuth, submitWaitlist);
 router.post('/upload-demo', optionalAuth, upload.single('demo'), uploadDemo);
 router.get('/strategy/:token', getStrategyByToken);
@@ -63,6 +68,7 @@ router.post('/verify-code', optionalAuth, verifyCode);
 
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', requireAdmin, getAdminSubmissions);
+router.get('/admin/drafts', requireAdmin, getAdminDrafts);
 router.get('/admin/submissions/:id', requireAdmin, getAdminSubmissionById);
 router.post('/admin/submissions/:id/send-code', requireAdmin, sendWaitlistCode);
 router.post('/admin/submissions/:id/strategy', requireAdmin, saveAndDeliverStrategy);
