@@ -5,12 +5,12 @@ import { env } from './env.js';
 // Upstash REST Client (for HTTP API compatibility)
 export const upstashRedis = env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN
   ? new UpstashRedis({
-      url: env.UPSTASH_REDIS_REST_URL,
-      token: env.UPSTASH_REDIS_REST_TOKEN,
-    })
+    url: env.UPSTASH_REDIS_REST_URL,
+    token: env.UPSTASH_REDIS_REST_TOKEN,
+  })
   : null;
 
-// ioredis client (for TCP TLS connection)
+// ioredis connection
 let ioRedisClient: Redis | null = null;
 
 if (env.REDIS_URL) {
