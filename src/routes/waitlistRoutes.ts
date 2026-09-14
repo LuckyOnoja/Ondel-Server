@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import {
   logStep,
+  requestInvite,
   saveStepDraft,
   getDraft,
   submitWaitlist,
@@ -21,6 +22,7 @@ import {
   getAnalysisBreakdown,
   getAdminSongs,
   getAdminDrafts,
+  getAdminInvitees,
 } from '../controllers/waitlistController.js';
 import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authMiddleware.js';
 
@@ -57,6 +59,7 @@ const upload = multer({
 
 // --- Public / User Endpoints ---
 router.post('/log-step', logStep);
+router.post('/request-invite', optionalAuth, requestInvite);
 router.post('/save-step', optionalAuth, saveStepDraft);
 router.get('/draft', optionalAuth, getDraft);
 router.post('/submit', optionalAuth, submitWaitlist);
@@ -69,6 +72,7 @@ router.post('/verify-code', optionalAuth, verifyCode);
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', requireAdmin, getAdminSubmissions);
 router.get('/admin/drafts', requireAdmin, getAdminDrafts);
+router.get('/admin/invitees', requireAdmin, getAdminInvitees);
 router.get('/admin/submissions/:id', requireAdmin, getAdminSubmissionById);
 router.post('/admin/submissions/:id/send-code', requireAdmin, sendWaitlistCode);
 router.post('/admin/submissions/:id/strategy', requireAdmin, saveAndDeliverStrategy);
@@ -78,3 +82,4 @@ router.get('/admin/analysis-breakdown', requireAdmin, getAnalysisBreakdown);
 router.get('/admin/songs', requireAdmin, getAdminSongs);
 
 export default router;
+

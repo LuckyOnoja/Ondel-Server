@@ -409,6 +409,18 @@ model WeeklyOpportunity {
   @@map("weekly_opportunities")
 }
 
+model WaitlistInvitee {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  headlineVariant String   @default("A")
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("waitlist_invitees")
+}
+
+
 enum AuthProvider {
   EMAIL
   GOOGLE

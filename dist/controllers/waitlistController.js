@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logStep = logStep;
+exports.requestInvite = requestInvite;
 exports.saveStepDraft = saveStepDraft;
 exports.getDraft = getDraft;
 exports.submitWaitlist = submitWaitlist;
@@ -21,6 +22,7 @@ exports.sendWaitlistCode = sendWaitlistCode;
 exports.getAnalysisBreakdown = getAnalysisBreakdown;
 exports.getAdminSongs = getAdminSongs;
 exports.getAdminDrafts = getAdminDrafts;
+exports.getAdminInvitees = getAdminInvitees;
 const fs_1 = __importDefault(require("fs"));
 const prisma_js_1 = require("../config/prisma.js");
 const mailer_js_1 = require("../config/mailer.js");
@@ -50,6 +52,53 @@ async function logStep(req, res) {
     catch (error) {
         console.error('[logStep error]:', error);
         res.status(500).json({ success: false, message: 'Failed to log waitlist step' });
+    }
+}
+/**
+ * Public: Request an invite from the landing page hero section and save email to DB table waitlist_invitees
+ */
+async function requestInvite(req, res) {
+    try {
+        const { email, variant = 'A', sessionId } = req.body;
+        const authUser = req.user;
+        const trimmedEmail = String(email || authUser?.email || '').toLowerCase().trim();
+        if (!trimmedEmail || !trimmedEmail.includes('@')) {
+            res.status(400).json({ success: false, message: 'A valid email address is required' });
+            return;
+        }
+        // 1. Upsert into WaitlistInvitee table
+        const invitee = await prisma_js_1.prisma.waitlistInvitee.upsert({
+            where: { email: trimmedEmail },
+            update: {
+                headlineVariant: String(variant),
+            },
+            create: {
+                email: trimmedEmail,
+                headlineVariant: String(variant),
+                status: 'PENDING',
+            },
+        });
+        // 2. Log step event to WaitlistStepLog
+        const activeSessionId = String(sessionId || trimmedEmail);
+        await prisma_js_1.prisma.waitlistStepLog.create({
+            data: {
+                sessionId: activeSessionId,
+                variant: String(variant),
+                stepNumber: 1,
+                stepName: 'REQUEST_INVITE_CLICKED',
+                metadata: { email: trimmedEmail, variant },
+            },
+        }).catch(() => { });
+        res.status(200).json({
+            success: true,
+            message: 'Invite request saved successfully',
+            email: trimmedEmail,
+            inviteeId: invitee.id,
+        });
+    }
+    catch (error) {
+        console.error('[requestInvite error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to record invite request' });
     }
 }
 /**
@@ -1026,5 +1075,24 @@ async function getAdminDrafts(req, res) {
     catch (error) {
         console.error('[getAdminDrafts error]:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch admin waitlist drafts' });
+    }
+}
+/**
+ * Admin: Get all saved waitlist invitees (from landing page hero)
+ */
+async function getAdminInvitees(req, res) {
+    try {
+        const invitees = await prisma_js_1.prisma.waitlistInvitee.findMany({
+            orderBy: { createdAt: 'desc' },
+        });
+        res.status(200).json({
+            success: true,
+            count: invitees.length,
+            invitees,
+        });
+    }
+    catch (error) {
+        console.error('[getAdminInvitees error]:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch waitlist invitees' });
     }
 }
