@@ -39,6 +39,7 @@ const upload = (0, multer_1.default)({
 });
 // --- Public / User Endpoints ---
 router.post('/log-step', waitlistController_js_1.logStep);
+router.post('/request-invite', authMiddleware_js_1.optionalAuth, waitlistController_js_1.requestInvite);
 router.post('/save-step', authMiddleware_js_1.optionalAuth, waitlistController_js_1.saveStepDraft);
 router.get('/draft', authMiddleware_js_1.optionalAuth, waitlistController_js_1.getDraft);
 router.post('/submit', authMiddleware_js_1.optionalAuth, waitlistController_js_1.submitWaitlist);
@@ -50,6 +51,7 @@ router.post('/verify-code', authMiddleware_js_1.optionalAuth, waitlistController
 // --- Admin Endpoints (Guarded by requireAdmin) ---
 router.get('/admin/submissions', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissions);
 router.get('/admin/drafts', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminDrafts);
+router.get('/admin/invitees', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminInvitees);
 router.get('/admin/submissions/:id', authMiddleware_js_1.requireAdmin, waitlistController_js_1.getAdminSubmissionById);
 router.post('/admin/submissions/:id/send-code', authMiddleware_js_1.requireAdmin, waitlistController_js_1.sendWaitlistCode);
 router.post('/admin/submissions/:id/strategy', authMiddleware_js_1.requireAdmin, waitlistController_js_1.saveAndDeliverStrategy);

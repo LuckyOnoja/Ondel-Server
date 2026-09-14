@@ -14,7 +14,7 @@ exports.upstashRedis = env_js_1.env.UPSTASH_REDIS_REST_URL && env_js_1.env.UPSTA
         token: env_js_1.env.UPSTASH_REDIS_REST_TOKEN,
     })
     : null;
-// ioredis client (for TCP TLS connection)
+// ioredis connection
 let ioRedisClient = null;
 if (env_js_1.env.REDIS_URL) {
     try {

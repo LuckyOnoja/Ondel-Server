@@ -36,6 +36,60 @@ export async function logStep(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * Public: Request an invite from the landing page hero section and save email to DB table waitlist_invitees
+ */
+export async function requestInvite(req: Request, res: Response): Promise<void> {
+  try {
+    const { email, variant = 'A', sessionId } = req.body;
+    const authUser = (req as AuthRequest).user;
+
+    const trimmedEmail = String(email || authUser?.email || '').toLowerCase().trim();
+
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      res.status(400).json({ success: false, message: 'A valid email address is required' });
+      return;
+    }
+
+    // 1. Upsert into WaitlistInvitee table
+    const invitee = await prisma.waitlistInvitee.upsert({
+      where: { email: trimmedEmail },
+      update: {
+        headlineVariant: String(variant),
+      },
+      create: {
+        email: trimmedEmail,
+        headlineVariant: String(variant),
+        status: 'PENDING',
+      },
+    });
+
+    // 2. Log step event to WaitlistStepLog
+    const activeSessionId = String(sessionId || trimmedEmail);
+    await prisma.waitlistStepLog.create({
+      data: {
+        sessionId: activeSessionId,
+        variant: String(variant),
+        stepNumber: 1,
+        stepName: 'REQUEST_INVITE_CLICKED',
+        metadata: { email: trimmedEmail, variant },
+      },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: 'Invite request saved successfully',
+      email: trimmedEmail,
+      inviteeId: invitee.id,
+    });
+  } catch (error: any) {
+    console.error('[requestInvite error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to record invite request' });
+  }
+}
+
+
+
+/**
  * Public/Auth: Save waitlist step draft for account
  */
 export async function saveStepDraft(req: Request, res: Response): Promise<void> {
@@ -1143,4 +1197,25 @@ export async function getAdminDrafts(req: AuthRequest, res: Response): Promise<v
     res.status(500).json({ success: false, message: 'Failed to fetch admin waitlist drafts' });
   }
 }
+
+/**
+ * Admin: Get all saved waitlist invitees (from landing page hero)
+ */
+export async function getAdminInvitees(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const invitees = await prisma.waitlistInvitee.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.status(200).json({
+      success: true,
+      count: invitees.length,
+      invitees,
+    });
+  } catch (error: any) {
+    console.error('[getAdminInvitees error]:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch waitlist invitees' });
+  }
+}
+
 
