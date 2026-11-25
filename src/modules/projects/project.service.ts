@@ -3,7 +3,12 @@ import path from 'path'
 import { prisma } from '../../config/prisma.js'
 import { generateSongSlug } from '../../utils/slugify.js'
 import { AudioScrutinizerService } from '../songs/audio-scrutinizer.service.js'
-import { ProjectDto, ProjectSongDto, ProjectVaultItemDto, ProjectCalendarEventDto, ProjectCampaignItemDto } from './project.types.js'
+import {
+  ProjectDto,
+  ProjectSongDto,
+  ProjectVaultItemDto,
+  ProjectCalendarEventDto,
+} from './project.types.js'
 import { cloudinary, isCloudinaryConfigured } from '../../config/cloudinary.js'
 import { CloudinaryService } from '../../services/cloudinary.service.js'
 
@@ -13,34 +18,93 @@ export const GRADIENT_PRESETS = [
   'linear-gradient(135deg, #F59E0B 0%, #EF4444 50%, #8B5CF6 100%)', // Solar Ember Fire
   'linear-gradient(135deg, #EC4899 0%, #F43F5E 50%, #F97316 100%)', // Sunset Coral Flare
   'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #D946EF 100%)', // Galactic Indigo
-  'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',               // Ocean Sky Blue
-  'linear-gradient(135deg, #FA709A 0%, #FEE140 100%)',               // Tropical Pink Gold
-  'linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)',               // Mint Spark
-  'linear-gradient(135deg, #FF0844 0%, #FFB199 100%)',               // Crimson Rose
-  'linear-gradient(135deg, #F83600 0%, #FE8C00 100%)',               // Tangerine Blaze
-  'linear-gradient(135deg, #B224EF 0%, #7579FF 100%)',               // Deep Purple Velvet
-  'linear-gradient(135deg, #9796F0 0%, #FBC7D4 100%)',               // Pastel Amethyst
-  'linear-gradient(135deg, #00C6FF 0%, #0072FF 100%)',               // Sapphire Flash
-  'linear-gradient(135deg, #F77062 0%, #FE5196 100%)',               // Electric Peach
-  'linear-gradient(135deg, #A8E063 0%, #56AB2F 100%)',               // Lime Emerald
-  'linear-gradient(135deg, #E0C3FC 0%, #8EC5FC 100%)',               // Lavender Dusk
-  'linear-gradient(135deg, #F093FB 0%, #F5576C 100%)',               // Cosmic Fuchsia
-  'linear-gradient(135deg, #5EE7DF 0%, #B490CA 100%)',               // Turquoise Dream
-  'linear-gradient(135deg, #C33764 0%, #1D2671 100%)',               // Midnight Ruby
-  'linear-gradient(135deg, #F12711 0%, #F5AF19 100%)',               // Flare Amber
+  'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+  'linear-gradient(135deg, #FA709A 0%, #FEE140 100%)',
+  'linear-gradient(135deg, #43E97B 0%, #38F9D7 100%)',
+  'linear-gradient(135deg, #FF0844 0%, #FFB199 100%)',
+  'linear-gradient(135deg, #F83600 0%, #FE8C00 100%)',
+  'linear-gradient(135deg, #B224EF 0%, #7579FF 100%)',
+  'linear-gradient(135deg, #9796F0 0%, #FBC7D4 100%)',
+  'linear-gradient(135deg, #00C6FF 0%, #0072FF 100%)',
+  'linear-gradient(135deg, #F77062 0%, #FE5196 100%)',
+  'linear-gradient(135deg, #A8E063 0%, #56AB2F 100%)',
+  'linear-gradient(135deg, #E0C3FC 0%, #8EC5FC 100%)',
+  'linear-gradient(135deg, #F093FB 0%, #F5576C 100%)',
+  'linear-gradient(135deg, #5EE7DF 0%, #B490CA 100%)',
+  'linear-gradient(135deg, #C33764 0%, #1D2671 100%)',
+  'linear-gradient(135deg, #F12711 0%, #F5AF19 100%)',
 ]
 
+function toIsoDate(value: Date | string): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    return value.slice(0, 10)
+  }
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().split('T')[0]
+  return d.toISOString().split('T')[0]
+}
+
+function parseIsoDay(iso: string): Date {
+  const clean = iso.trim().slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    return new Date(`${clean}T12:00:00.000Z`)
+  }
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? new Date() : d
+}
+
+function kindToCategory(kind?: string, isRelease?: boolean): 'Release' | 'Content' | 'Pitch' | 'Promo' {
+  if (isRelease || kind === 'release') return 'Release'
+  if (kind === 'pitch') return 'Pitch'
+  if (kind === 'ads' || kind === 'conversation') return 'Promo'
+  return 'Content'
+}
+
+const PROJECT_INCLUDE = {
+  songs: {
+    include: { campaigns: true, artist: true },
+  },
+  vaultItems: true,
+  calendarEvents: {
+    orderBy: { date: 'asc' as const },
+  },
+  campaigns: true,
+}
+
 export class ProjectService {
-  /**
-   * Helper to map Prisma Project model with relations into clean ProjectDto
-   */
+  private mapCalendarEvent(ce: any): ProjectCalendarEventDto {
+    return {
+      id: ce.id,
+      title: ce.title,
+      date: ce.date ? toIsoDate(ce.date) : toIsoDate(new Date()),
+      category: (ce.category || 'Content') as ProjectCalendarEventDto['category'],
+      kind: ce.kind || undefined,
+      platforms: Array.isArray(ce.platforms) ? ce.platforms : [],
+      caption: ce.caption || undefined,
+      captions: ce.captions && typeof ce.captions === 'object' ? ce.captions : undefined,
+      why: ce.why || undefined,
+      time: ce.time || undefined,
+      timeZone: ce.timeZone || undefined,
+      remind: Boolean(ce.remind),
+      isRelease: Boolean(ce.isRelease),
+      fromOndie: Boolean(ce.fromOndie),
+      postedAt: ce.postedAt ? new Date(ce.postedAt).toISOString() : undefined,
+      attachments: Array.isArray(ce.attachments) ? ce.attachments : undefined,
+      songTitle: ce.songTitle || undefined,
+      songId: ce.songId || undefined,
+      completed: Boolean(ce.completed),
+    }
+  }
+
   private mapToProjectDto(p: any): ProjectDto {
     return {
       id: p.id,
       name: p.name,
+      releaseType: (p.releaseType || 'SINGLE') as ProjectDto['releaseType'],
       gradient: p.gradient || GRADIENT_PRESETS[0],
-      createdAt: p.createdAt ? new Date(p.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      releaseTargetDate: p.releaseTargetDate ? new Date(p.releaseTargetDate).toISOString().split('T')[0] : undefined,
+      createdAt: p.createdAt ? toIsoDate(p.createdAt) : toIsoDate(new Date()),
+      releaseTargetDate: p.releaseTargetDate ? toIsoDate(p.releaseTargetDate) : undefined,
+      metadata: p.metadata && typeof p.metadata === 'object' ? p.metadata : {},
       songs: (p.songs || []).map((s: any, idx: number) => ({
         id: s.id,
         slug: s.slug || undefined,
@@ -49,7 +113,7 @@ export class ProjectService {
         audioUrl: s.audioUrl || undefined,
         audioFileName: s.audioFileName || (s.metadata ? (s.metadata as any).audioFileName : undefined),
         status: 'Strategy Ready',
-        releaseDate: s.createdAt ? new Date(s.createdAt).toISOString().split('T')[0] : undefined,
+        releaseDate: s.createdAt ? toIsoDate(s.createdAt) : undefined,
         campaignsCount: s.campaigns ? s.campaigns.length : 0,
         gradient: s.gradient || GRADIENT_PRESETS[idx % GRADIENT_PRESETS.length],
         bpm: s.bpm || (s.metadata ? (s.metadata as any).estimatedBpm : undefined) || undefined,
@@ -71,34 +135,23 @@ export class ProjectService {
             name: v.name,
             type: v.type as any,
             size: v.size,
-            uploadedAt: v.uploadedAt ? new Date(v.uploadedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            uploadedAt: v.uploadedAt ? toIsoDate(v.uploadedAt) : toIsoDate(new Date()),
             fileUrl: v.fileUrl || undefined,
           })
         }
         return list
       })(),
-      calendarEvents: (p.calendarEvents || []).map((ce: any) => ({
-        id: ce.id,
-        title: ce.title,
-        date: ce.date ? new Date(ce.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        category: ce.category as any,
-        songTitle: ce.songTitle || undefined,
-        songId: ce.songId || undefined,
-        completed: ce.completed || false,
-      })),
+      calendarEvents: (p.calendarEvents || []).map((ce: any) => this.mapCalendarEvent(ce)),
       campaigns: (p.campaigns || []).map((c: any) => ({
         id: c.id,
         title: c.goal || 'Campaign',
-        platform: 'TikTok / Spotify',
-        status: c.status || 'Active',
+        platform: 'TikTok' as const,
+        status: (c.status || 'Active') as any,
         reach: `${c.budgetCredits || 10} Credits`,
       })),
     }
   }
 
-  /**
-   * Get all projects for a given user or user email from PostgreSQL DB
-   */
   async getUserProjects(userIdOrEmail: string): Promise<ProjectDto[]> {
     const identifier = userIdOrEmail.toLowerCase().trim()
 
@@ -116,48 +169,17 @@ export class ProjectService {
       })
     }
 
-    if (!user) {
-      return []
-    }
+    if (!user) return []
 
-    let projects = await prisma.project.findMany({
+    const projects = await prisma.project.findMany({
       where: { userId: user.id },
-      include: {
-        songs: {
-          include: { campaigns: true, artist: true },
-        },
-        vaultItems: true,
-        calendarEvents: true,
-        campaigns: true,
-      },
+      include: PROJECT_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })
-
-    // If user has no project in PostgreSQL, auto-create default project for them
-    if (projects.length === 0) {
-      const defaultProject = await prisma.project.create({
-        data: {
-          userId: user.id,
-          name: 'Untitled Project',
-          gradient: GRADIENT_PRESETS[0],
-          status: 'ACTIVE',
-        },
-        include: {
-          songs: { include: { campaigns: true, artist: true } },
-          vaultItems: true,
-          calendarEvents: true,
-          campaigns: true,
-        },
-      })
-      projects = [defaultProject]
-    }
 
     return projects.map((p) => this.mapToProjectDto(p))
   }
 
-  /**
-   * Select a unique gradient for a new project for a user
-   */
   private async getUniqueProjectGradient(userId: string): Promise<string> {
     const userProjects = await prisma.project.findMany({
       where: { userId },
@@ -169,9 +191,6 @@ export class ProjectService {
     return GRADIENT_PRESETS[userProjects.length % GRADIENT_PRESETS.length]
   }
 
-  /**
-   * Select a unique gradient for a new song in a project
-   */
   private async getUniqueSongGradient(projectId: string): Promise<string> {
     const projectSongs = await prisma.song.findMany({
       where: { projectId },
@@ -183,16 +202,47 @@ export class ProjectService {
     return GRADIENT_PRESETS[projectSongs.length % GRADIENT_PRESETS.length]
   }
 
-  /**
-   * Create a new project in PostgreSQL DB
-   */
+  private async syncReleaseDayEvent(projectId: string, projectName: string, releaseDateIso: string) {
+    const releaseDate = parseIsoDay(releaseDateIso)
+    const existing = await prisma.calendarEvent.findFirst({
+      where: { projectId, isRelease: true },
+    })
+    if (existing) {
+      await prisma.calendarEvent.update({
+        where: { id: existing.id },
+        data: {
+          title: `${projectName} — Release Day`,
+          date: releaseDate,
+          category: 'Release',
+          kind: 'release',
+          platforms: existing.platforms.length ? existing.platforms : ['all'],
+          isRelease: true,
+        },
+      })
+    } else {
+      await prisma.calendarEvent.create({
+        data: {
+          projectId,
+          title: `${projectName} — Release Day`,
+          date: releaseDate,
+          category: 'Release',
+          kind: 'release',
+          platforms: ['all'],
+          isRelease: true,
+        },
+      })
+    }
+  }
+
   async createProject(
     userIdOrEmail: string,
     name: string,
     gradient?: string,
     initialSongTitle?: string,
     audioFileName?: string,
-    audioUrl?: string
+    audioUrl?: string,
+    releaseType?: string,
+    releaseTargetDate?: string
   ): Promise<ProjectDto> {
     const identifier = userIdOrEmail.toLowerCase().trim()
 
@@ -229,32 +279,34 @@ export class ProjectService {
       where: { userId: user.id },
     })
 
-    const gradientSignature =
-      gradient || (await this.getUniqueProjectGradient(user.id))
-
-    const defaultName = existingUserProjectsCount === 0 ? 'Untitled Project' : `Untitled Project ${existingUserProjectsCount + 1}`
+    const gradientSignature = gradient || (await this.getUniqueProjectGradient(user.id))
+    const defaultName =
+      existingUserProjectsCount === 0 ? 'Untitled Project' : `Untitled Project ${existingUserProjectsCount + 1}`
     const projectName = name && name.trim() ? name.trim() : defaultName
+    const validReleaseType = ['SINGLE', 'EP', 'ALBUM'].includes((releaseType || '').toUpperCase())
+      ? (releaseType || 'SINGLE').toUpperCase()
+      : 'SINGLE'
 
     const newProject = await prisma.project.create({
       data: {
         userId: user.id,
         name: projectName,
+        releaseType: validReleaseType,
         gradient: gradientSignature,
         status: 'ACTIVE',
+        releaseTargetDate: releaseTargetDate ? parseIsoDay(releaseTargetDate) : null,
       },
-      include: {
-        songs: { include: { campaigns: true, artist: true } },
-        vaultItems: true,
-        calendarEvents: true,
-        campaigns: true,
-      },
+      include: PROJECT_INCLUDE,
     })
 
-    // If initial song or audio asset provided, create song & vault item in PostgreSQL connected to project!
+    if (releaseTargetDate) {
+      await this.syncReleaseDayEvent(newProject.id, projectName, releaseTargetDate)
+    }
+
     if (initialSongTitle || audioFileName || audioUrl) {
       const songTitle =
         initialSongTitle ||
-        (audioFileName ? audioFileName.replace(/\.[^/.]+$/, '') : 'Initial Project Track')
+        (audioFileName ? audioFileName.replace(/\.[^/.]+$/, '') : projectName)
 
       const songGradient = await this.getUniqueSongGradient(newProject.id)
 
@@ -283,41 +335,78 @@ export class ProjectService {
           data: {
             projectId: newProject.id,
             name: audioFileName,
-            type: 'stem',
-            size: 'Master Audio File',
+            type: 'master',
+            size: 'Audio File',
             fileUrl: audioUrl || null,
           },
         })
       }
-
-      await prisma.calendarEvent.create({
-        data: {
-          projectId: newProject.id,
-          title: `${songTitle} Pitching & Release`,
-          date: new Date(Date.now() + 14 * 86400000),
-          category: 'Release',
-          songTitle,
-        },
-      })
     }
 
-    // Refetch newly created project with all relations populated
     const fullProject = await prisma.project.findUnique({
       where: { id: newProject.id },
-      include: {
-        songs: { include: { campaigns: true, artist: true } },
-        vaultItems: true,
-        calendarEvents: true,
-        campaigns: true,
-      },
+      include: PROJECT_INCLUDE,
     })
 
     return this.mapToProjectDto(fullProject || newProject)
   }
 
-  /**
-   * Add a song folder to an existing project in PostgreSQL DB
-   */
+  async updateProject(
+    userIdOrEmail: string,
+    projectId: string,
+    updates: {
+      name?: string
+      releaseTargetDate?: string | null
+      releaseType?: string
+      metadata?: Record<string, any>
+    }
+  ): Promise<ProjectDto> {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    })
+
+    if (!project) throw new Error('Project not found in database')
+
+    const data: Record<string, any> = {}
+
+    if (typeof updates.name === 'string' && updates.name.trim()) {
+      data.name = updates.name.trim()
+    }
+
+    if (typeof updates.releaseType === 'string' && ['SINGLE', 'EP', 'ALBUM'].includes(updates.releaseType.toUpperCase())) {
+      data.releaseType = updates.releaseType.toUpperCase()
+    }
+
+    if (updates.releaseTargetDate !== undefined) {
+      data.releaseTargetDate = updates.releaseTargetDate ? parseIsoDay(updates.releaseTargetDate) : null
+    }
+
+    if (updates.metadata && typeof updates.metadata === 'object') {
+      const existingMeta = project.metadata && typeof project.metadata === 'object' ? (project.metadata as Record<string, any>) : {}
+      data.metadata = {
+        ...existingMeta,
+        ...updates.metadata,
+      }
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data,
+      include: PROJECT_INCLUDE,
+    })
+
+    if (updates.releaseTargetDate) {
+      await this.syncReleaseDayEvent(projectId, updatedProject.name, updates.releaseTargetDate)
+    }
+
+    const refreshed = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: PROJECT_INCLUDE,
+    })
+
+    return this.mapToProjectDto(refreshed || updatedProject)
+  }
+
   async addSongToProject(
     userIdOrEmail: string,
     projectId: string,
@@ -336,7 +425,7 @@ export class ProjectService {
         data: {
           userId: project.userId,
           name: songData.artistName || 'Artist',
-          genres: ['Afrobeats'],
+          genres: [songData.genre || 'Afrobeats'],
         },
       })
     }
@@ -356,14 +445,13 @@ export class ProjectService {
         projectId: project.id,
         title: songData.title,
         slug,
-        genre: 'Afrobeats',
+        genre: songData.genre || 'Afrobeats',
         audioUrl: songData.audioUrl || null,
         gradient: songGradient,
         metadata: songData.audioFileName ? { audioFileName: songData.audioFileName } : undefined,
       },
     })
 
-    // Trigger background audio A&R analysis if audioUrl is provided
     if (createdSong.audioUrl) {
       AudioScrutinizerService.scrutinizeSong(createdSong.id).catch((err) => {
         console.warn('[ProjectService] Background scrutinization failed:', err.message)
@@ -378,20 +466,95 @@ export class ProjectService {
       audioUrl: createdSong.audioUrl || undefined,
       audioFileName: songData.audioFileName,
       status: 'Strategy Ready',
-      releaseDate: createdSong.createdAt.toISOString().split('T')[0],
+      releaseDate: toIsoDate(createdSong.createdAt),
       campaignsCount: 0,
       gradient: createdSong.gradient || songGradient,
     }
   }
 
-  /**
-   * Add a vault item to an existing project in PostgreSQL DB
-   */
+  private async ensureSongForMasterVaultItem(
+    projectId: string,
+    fileName: string,
+    fileUrl?: string
+  ): Promise<ProjectSongDto | undefined> {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: { user: { include: { artists: true } }, songs: { include: { artist: true } } },
+    })
+    if (!project) return undefined
+
+    const cleanTitle =
+      fileName
+        .replace(/\.[^/.]+$/, '')
+        .replace(/_+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim() || project.name
+
+    // Skip if a song with the same audioUrl or same title already exists in this project
+    const duplicate = project.songs.find(
+      (s) =>
+        (fileUrl && s.audioUrl && s.audioUrl === fileUrl) ||
+        s.title.trim().toLowerCase() === cleanTitle.toLowerCase()
+    )
+    if (duplicate) return undefined
+
+    let artist = project.user.artists[0]
+    if (!artist) {
+      artist = await prisma.artist.create({
+        data: {
+          userId: project.userId,
+          name: project.user.name || 'Artist',
+          genres: ['Afrobeats'],
+        },
+      })
+    }
+
+    const songGradient = await this.getUniqueSongGradient(project.id)
+    let slug = generateSongSlug(cleanTitle)
+    let existingSlug = await prisma.song.findUnique({ where: { slug } })
+    while (existingSlug) {
+      slug = generateSongSlug(cleanTitle)
+      existingSlug = await prisma.song.findUnique({ where: { slug } })
+    }
+
+    const createdSong = await prisma.song.create({
+      data: {
+        artistId: artist.id,
+        projectId: project.id,
+        title: cleanTitle,
+        slug,
+        genre: 'Afrobeats',
+        audioUrl: fileUrl || null,
+        gradient: songGradient,
+        metadata: { audioFileName: fileName },
+      },
+    })
+
+    if (createdSong.audioUrl) {
+      AudioScrutinizerService.scrutinizeSong(createdSong.id).catch((err) => {
+        console.warn('[ProjectService] Background scrutinization failed:', err.message)
+      })
+    }
+
+    return {
+      id: createdSong.id,
+      slug: createdSong.slug || slug,
+      title: createdSong.title,
+      artistName: artist.name,
+      audioUrl: createdSong.audioUrl || undefined,
+      audioFileName: fileName,
+      status: 'Strategy Ready',
+      releaseDate: toIsoDate(createdSong.createdAt),
+      campaignsCount: 0,
+      gradient: createdSong.gradient || songGradient,
+    }
+  }
+
   async addVaultItemToProject(
     userIdOrEmail: string,
     projectId: string,
     itemData: Omit<ProjectVaultItemDto, 'id'>
-  ): Promise<ProjectVaultItemDto> {
+  ): Promise<{ vaultItem: ProjectVaultItemDto; song?: ProjectSongDto }> {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
     })
@@ -411,20 +574,29 @@ export class ProjectService {
       },
     })
 
+    let syncedSong: ProjectSongDto | undefined
+    if (createdItem.type === 'master') {
+      syncedSong = await this.ensureSongForMasterVaultItem(
+        project.id,
+        createdItem.name,
+        createdItem.fileUrl || undefined
+      )
+    }
+
     return {
-      id: createdItem.id,
-      slug: createdItem.slug || undefined,
-      name: createdItem.name,
-      type: createdItem.type as any,
-      size: createdItem.size,
-      uploadedAt: createdItem.uploadedAt.toISOString().split('T')[0],
-      fileUrl: createdItem.fileUrl || undefined,
+      vaultItem: {
+        id: createdItem.id,
+        slug: createdItem.slug || undefined,
+        name: createdItem.name,
+        type: createdItem.type as any,
+        size: createdItem.size,
+        uploadedAt: toIsoDate(createdItem.uploadedAt),
+        fileUrl: createdItem.fileUrl || undefined,
+      },
+      song: syncedSong,
     }
   }
 
-  /**
-   * Directly upload file buffer to Cloudinary or disk, and create VaultItem in DB
-   */
   async uploadVaultFileToProject(
     userIdOrEmail: string,
     projectId: string,
@@ -432,7 +604,7 @@ export class ProjectService {
     fileName?: string,
     type: string = 'master',
     size?: string
-  ): Promise<ProjectVaultItemDto> {
+  ): Promise<{ vaultItem: ProjectVaultItemDto; song?: ProjectSongDto }> {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
     })
@@ -442,28 +614,10 @@ export class ProjectService {
     let fileUrl: string | undefined = undefined
 
     if (fileBuffer && fileName) {
-      try {
-        const isImg = type === 'artwork' || fileName.match(/\.(png|jpg|jpeg|webp|gif|svg)$/i)
-        if (isImg) {
-          fileUrl = await CloudinaryService.uploadProofBuffer(fileBuffer, 'ondel_vault')
-        } else {
-          fileUrl = await CloudinaryService.uploadAudioBuffer(fileBuffer, 'ondel_vault')
-        }
-      } catch (cdnErr) {
-        console.warn('⚠️ [Cloudinary] Server upload fallback to disk:', cdnErr)
-        try {
-          const uploadsDir = path.join(process.cwd(), 'uploads', 'vault')
-          if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true })
-          }
-          const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-          const diskPath = path.join(uploadsDir, safeName)
-          fs.writeFileSync(diskPath, fileBuffer)
-          fileUrl = `http://localhost:8000/uploads/vault/${safeName}`
-        } catch (diskErr) {
-          console.error('❌ Disk upload error:', diskErr)
-        }
-      }
+      const uploaded = await CloudinaryService.uploadMediaBuffer(fileBuffer, fileName, undefined, {
+        folder: 'ondel_vault',
+      })
+      fileUrl = uploaded.url
     }
 
     const itemSlug = generateSongSlug(fileName || 'vault-asset')
@@ -479,14 +633,26 @@ export class ProjectService {
       },
     })
 
+    let syncedSong: ProjectSongDto | undefined
+    if (createdItem.type === 'master') {
+      syncedSong = await this.ensureSongForMasterVaultItem(
+        project.id,
+        createdItem.name,
+        createdItem.fileUrl || undefined
+      )
+    }
+
     return {
-      id: createdItem.id,
-      slug: createdItem.slug || undefined,
-      name: createdItem.name,
-      type: createdItem.type as any,
-      size: createdItem.size,
-      uploadedAt: createdItem.uploadedAt.toISOString().split('T')[0],
-      fileUrl: createdItem.fileUrl || undefined,
+      vaultItem: {
+        id: createdItem.id,
+        slug: createdItem.slug || undefined,
+        name: createdItem.name,
+        type: createdItem.type as any,
+        size: createdItem.size,
+        uploadedAt: toIsoDate(createdItem.uploadedAt),
+        fileUrl: createdItem.fileUrl || undefined,
+      },
+      song: syncedSong,
     }
   }
 
@@ -494,22 +660,18 @@ export class ProjectService {
     try {
       const uploadIndex = url.indexOf('/upload/')
       if (uploadIndex === -1) return null
-      let path = url.substring(uploadIndex + 8)
-      if (path.startsWith('v') && path.includes('/')) {
-        const slashIndex = path.indexOf('/')
-        path = path.substring(slashIndex + 1)
+      let p = url.substring(uploadIndex + 8)
+      if (p.startsWith('v') && p.includes('/')) {
+        const slashIndex = p.indexOf('/')
+        p = p.substring(slashIndex + 1)
       }
-      const lastDotIndex = path.lastIndexOf('.')
-      const publicId = lastDotIndex !== -1 ? path.substring(0, lastDotIndex) : path
-      return publicId
-    } catch (err) {
+      const lastDotIndex = p.lastIndexOf('.')
+      return lastDotIndex !== -1 ? p.substring(0, lastDotIndex) : p
+    } catch {
       return null
     }
   }
 
-  /**
-   * Delete a vault item from an existing project in PostgreSQL DB and purge from Cloudinary CDN if applicable
-   */
   async deleteVaultItemFromProject(
     userIdOrEmail: string,
     projectId: string,
@@ -523,7 +685,6 @@ export class ProjectService {
       throw new Error('Vault item not found in project')
     }
 
-    // If fileUrl is a Cloudinary URL, purge resource from Cloudinary CDN
     if (vaultItem.fileUrl && vaultItem.fileUrl.includes('cloudinary.com')) {
       try {
         const publicId = this.extractCloudinaryPublicId(vaultItem.fileUrl)
@@ -531,7 +692,6 @@ export class ProjectService {
           await cloudinary.uploader.destroy(publicId, { resource_type: 'video' }).catch(() => null)
           await cloudinary.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => null)
           await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' }).catch(() => null)
-          console.log(`✅ [Cloudinary CDN Purge] Successfully purged publicId "${publicId}"`)
         }
       } catch (cdnErr) {
         console.warn('⚠️ [Cloudinary] Soft warning purging vault item resource:', cdnErr)
@@ -542,12 +702,24 @@ export class ProjectService {
       where: { id: vaultItemId },
     })
 
+    // Keep project songs in sync if this master vault item was linked to a song with the same audioUrl
+    if (vaultItem.type === 'master' && vaultItem.fileUrl) {
+      await prisma.song.deleteMany({
+        where: { projectId, audioUrl: vaultItem.fileUrl },
+      })
+    }
+
     return true
   }
 
-  /**
-   * Add a calendar event to an existing project in PostgreSQL DB
-   */
+  async getCalendarEventsForProject(projectId: string): Promise<ProjectCalendarEventDto[]> {
+    const events = await prisma.calendarEvent.findMany({
+      where: { projectId },
+      orderBy: { date: 'asc' },
+    })
+    return events.map((e) => this.mapCalendarEvent(e))
+  }
+
   async addCalendarEventToProject(
     userIdOrEmail: string,
     projectId: string,
@@ -562,48 +734,139 @@ export class ProjectService {
     const createdEvent = await prisma.calendarEvent.create({
       data: {
         projectId: project.id,
-        title: eventData.title,
-        date: new Date(eventData.date),
-        category: eventData.category || 'Release',
+        songId: eventData.songId || null,
+        title: eventData.title.trim(),
+        date: parseIsoDay(eventData.date),
+        category: eventData.category || kindToCategory(eventData.kind, eventData.isRelease),
+        kind: eventData.kind || null,
+        platforms: Array.isArray(eventData.platforms) ? eventData.platforms : [],
+        caption: eventData.caption || null,
+        captions: eventData.captions ? (eventData.captions as any) : undefined,
+        why: eventData.why || null,
+        time: eventData.time || null,
+        timeZone: eventData.timeZone || null,
+        remind: Boolean(eventData.remind),
+        isRelease: Boolean(eventData.isRelease),
+        fromOndie: Boolean(eventData.fromOndie),
+        postedAt: eventData.postedAt ? new Date(eventData.postedAt) : null,
+        attachments: eventData.attachments ? (eventData.attachments as any) : undefined,
         songTitle: eventData.songTitle || null,
+        completed: Boolean(eventData.completed),
       },
     })
 
-    return {
-      id: createdEvent.id,
-      title: createdEvent.title,
-      date: createdEvent.date.toISOString().split('T')[0],
-      category: createdEvent.category as any,
-      songTitle: createdEvent.songTitle || undefined,
-    }
+    return this.mapCalendarEvent(createdEvent)
   }
 
-  /**
-   * Rename an existing project in PostgreSQL DB
-   */
-  async renameProject(
+  async batchAddCalendarEvents(
     userIdOrEmail: string,
     projectId: string,
-    newName: string
-  ): Promise<ProjectDto> {
+    events: Omit<ProjectCalendarEventDto, 'id'>[]
+  ): Promise<ProjectCalendarEventDto[]> {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
+      include: { calendarEvents: true },
     })
 
     if (!project) throw new Error('Project not found in database')
 
-    const updatedProject = await prisma.project.update({
-      where: { id: projectId },
-      data: { name: newName.trim() || 'Untitled Project' },
-      include: {
-        songs: { include: { campaigns: true, artist: true } },
-        vaultItems: true,
-        calendarEvents: true,
-        campaigns: true,
-      },
+    const existingKeys = new Set(
+      project.calendarEvents.map((e) => `${toIsoDate(e.date)}::${e.title.trim().toLowerCase()}`)
+    )
+
+    const created: ProjectCalendarEventDto[] = []
+    for (const ev of events) {
+      if (!ev.title?.trim() || !ev.date) continue
+      const key = `${toIsoDate(ev.date)}::${ev.title.trim().toLowerCase()}`
+      if (existingKeys.has(key)) continue
+      existingKeys.add(key)
+      const row = await prisma.calendarEvent.create({
+        data: {
+          projectId: project.id,
+          songId: ev.songId || null,
+          title: ev.title.trim(),
+          date: parseIsoDay(ev.date),
+          category: ev.category || kindToCategory(ev.kind, ev.isRelease),
+          kind: ev.kind || 'post',
+          platforms: Array.isArray(ev.platforms) ? ev.platforms : [],
+          caption: ev.caption || null,
+          captions: ev.captions ? (ev.captions as any) : undefined,
+          why: ev.why || null,
+          time: ev.time || null,
+          timeZone: ev.timeZone || null,
+          remind: Boolean(ev.remind),
+          isRelease: Boolean(ev.isRelease),
+          fromOndie: ev.fromOndie ?? true,
+          postedAt: ev.postedAt ? new Date(ev.postedAt) : null,
+          attachments: ev.attachments ? (ev.attachments as any) : undefined,
+          songTitle: ev.songTitle || project.name,
+          completed: Boolean(ev.completed),
+        },
+      })
+      created.push(this.mapCalendarEvent(row))
+    }
+
+    return created
+  }
+
+  async updateCalendarEvent(
+    userIdOrEmail: string,
+    projectId: string,
+    eventId: string,
+    updates: Partial<Omit<ProjectCalendarEventDto, 'id'>>
+  ): Promise<ProjectCalendarEventDto> {
+    const existing = await prisma.calendarEvent.findUnique({
+      where: { id: eventId },
     })
 
-    return this.mapToProjectDto(updatedProject)
+    if (!existing || existing.projectId !== projectId) {
+      throw new Error('Calendar event not found in project')
+    }
+
+    const data: Record<string, any> = {}
+    if (updates.title !== undefined) data.title = updates.title.trim()
+    if (updates.date !== undefined) data.date = parseIsoDay(updates.date)
+    if (updates.category !== undefined) data.category = updates.category
+    if (updates.kind !== undefined) data.kind = updates.kind
+    if (updates.platforms !== undefined) data.platforms = updates.platforms
+    if (updates.caption !== undefined) data.caption = updates.caption || null
+    if (updates.captions !== undefined) data.captions = updates.captions ?? null
+    if (updates.why !== undefined) data.why = updates.why || null
+    if (updates.time !== undefined) data.time = updates.time || null
+    if (updates.timeZone !== undefined) data.timeZone = updates.timeZone || null
+    if (updates.remind !== undefined) data.remind = Boolean(updates.remind)
+    if (updates.isRelease !== undefined) data.isRelease = Boolean(updates.isRelease)
+    if (updates.fromOndie !== undefined) data.fromOndie = Boolean(updates.fromOndie)
+    if (updates.postedAt !== undefined) data.postedAt = updates.postedAt ? new Date(updates.postedAt) : null
+    if (updates.attachments !== undefined) data.attachments = updates.attachments ?? null
+    if (updates.completed !== undefined) data.completed = Boolean(updates.completed)
+
+    const updated = await prisma.calendarEvent.update({
+      where: { id: eventId },
+      data,
+    })
+
+    return this.mapCalendarEvent(updated)
+  }
+
+  async deleteCalendarEvent(
+    userIdOrEmail: string,
+    projectId: string,
+    eventId: string
+  ): Promise<boolean> {
+    const existing = await prisma.calendarEvent.findUnique({
+      where: { id: eventId },
+    })
+
+    if (!existing || existing.projectId !== projectId) {
+      throw new Error('Calendar event not found in project')
+    }
+
+    await prisma.calendarEvent.delete({
+      where: { id: eventId },
+    })
+
+    return true
   }
 }
 

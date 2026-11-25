@@ -198,9 +198,11 @@ model Project {
   id                String          @id @default(cuid())
   userId            String
   name              String
+  releaseType       String          @default("SINGLE") // SINGLE, EP, ALBUM
   gradient          String          @default("linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #3B82F6 100%)")
   status            String          @default("ACTIVE")
   releaseTargetDate DateTime?
+  metadata          Json?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -208,9 +210,36 @@ model Project {
   vaultItems        VaultItem[]
   calendarEvents    CalendarEvent[]
   campaigns         Campaign[]
+  chats             ProjectChat[]
 
   @@index([userId])
   @@map("projects")
+}
+
+model ProjectChat {
+  id        String               @id @default(cuid())
+  projectId String
+  title     String               @default("New chat")
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages  ProjectChatMessage[]
+
+  @@index([projectId])
+  @@map("project_chats")
+}
+
+model ProjectChatMessage {
+  id        String      @id @default(cuid())
+  chatId    String
+  role      String      // user | ondie
+  text      String      @db.Text
+  payload   Json?
+  createdAt DateTime    @default(now())
+  chat      ProjectChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@map("project_chat_messages")
 }
 
 model VaultItem {
@@ -228,17 +257,32 @@ model VaultItem {
 }
 
 model CalendarEvent {
-  id        String   @id @default(cuid())
-  projectId String
-  songId    String?
-  title     String
-  date      DateTime
-  category  String   // Release, Content, Pitch, Promo
-  songTitle String?
-  completed Boolean  @default(false)
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  song      Song?    @relation(fields: [songId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  projectId   String
+  songId      String?
+  title       String
+  date        DateTime
+  category    String    // Release, Content, Pitch, Promo
+  kind        String?   // post, video, conversation, ads, pitch, release
+  platforms   String[]  @default([])
+  caption     String?   @db.Text
+  captions    Json?
+  why         String?   @db.Text
+  time        String?
+  timeZone    String?
+  remind      Boolean   @default(false)
+  isRelease   Boolean   @default(false)
+  fromOndie   Boolean   @default(false)
+  postedAt    DateTime?
+  attachments Json?
+  songTitle   String?
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  song        Song?     @relation(fields: [songId], references: [id], onDelete: Cascade)
 
+  @@index([projectId, date])
   @@map("calendar_events")
 }
 
