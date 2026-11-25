@@ -124,3 +124,45 @@ export async function streamOndieCaptions(req: AuthRequest, res: Response): Prom
     if (!res.writableEnded) res.end()
   }
 }
+
+export async function streamOndiePitch(req: AuthRequest, res: Response): Promise<void> {
+  const projectId = String(req.params.id)
+  const { length, existingDraft, pitchRecord } = req.body || {}
+
+  res.status(200)
+  res.setHeader('Content-Type', 'application/x-ndjson')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders?.()
+
+  const controller = new AbortController()
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
+
+  const emit = (event: any) => {
+    if (!res.writableEnded) {
+      res.write(`${JSON.stringify(event)}\n`)
+    }
+  }
+
+  try {
+    await OndieService.streamEditorialPitch(
+      projectId,
+      {
+        length: length === 'short' ? 'short' : 'full',
+        existingDraft: typeof existingDraft === 'string' ? existingDraft : undefined,
+        pitchRecord: Array.isArray(pitchRecord) ? pitchRecord : undefined,
+      },
+      emit,
+      controller.signal
+    )
+  } catch (error: any) {
+    if (!controller.signal.aborted) {
+      emit({ type: 'error', error: error?.message || 'Failed to draft editorial pitch' })
+    }
+  } finally {
+    if (!res.writableEnded) res.end()
+  }
+}

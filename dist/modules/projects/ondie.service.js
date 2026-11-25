@@ -255,7 +255,8 @@ async function streamDeepSeekTurn(apiKey, messages, useTools, onTextDelta, signa
     });
     if (!response.ok || !response.body) {
         const errBody = await response.text().catch(() => '');
-        throw new Error(`DeepSeek API error ${response.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}`);
+        console.error(`[OndieService] Upstream model error ${response.status}:`, errBody.slice(0, 300));
+        throw new Error('Ondie couldn’t complete this right now. Please try again.');
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -486,7 +487,8 @@ HOW TO RESPOND:
     static async streamChat(projectId, input, emit, signal) {
         const apiKey = env_js_1.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
         if (!apiKey) {
-            emit({ type: 'error', error: 'DEEPSEEK_API_KEY is missing in server/.env.' });
+            console.error('[OndieService] Missing AI API key in server/.env');
+            emit({ type: 'error', error: 'Ondie is temporarily unavailable right now. Please try again shortly.' });
             return;
         }
         const ctx = await this.loadProjectContext(projectId);
@@ -708,17 +710,18 @@ HOW TO RESPOND:
                 return;
             console.error('[OndieService streamChat error]:', err);
             emit({ type: 'step', id: 'think', label: 'Thinking through your release', status: 'error' });
-            emit({ type: 'error', error: err?.message || 'Ondie ran into a problem contacting DeepSeek.' });
+            emit({ type: 'error', error: 'Ondie ran into a problem. Please try again.' });
         }
     }
     static async streamCaptions(projectId, reqBody, emit, signal) {
         const apiKey = env_js_1.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
         if (!apiKey) {
-            emit({ type: 'error', error: 'DEEPSEEK_API_KEY is missing in server/.env.' });
+            console.error('[OndieService] Missing AI API key in server/.env');
+            emit({ type: 'error', error: 'Ondie is temporarily unavailable right now. Please try again shortly.' });
             return;
         }
         const ctx = await this.loadProjectContext(projectId);
-        emit({ type: 'step', id: 'draft', label: 'Drafting captions with DeepSeek', status: 'active' });
+        emit({ type: 'step', id: 'draft', label: 'Drafting captions with Ondie', status: 'active' });
         const sectionPrompt = reqBody.sections
             .map((s) => `=== ${s.key}\n(${s.label}${s.limit ? `, max ${s.limit} chars` : ''})`)
             .join('\n');
@@ -740,14 +743,232 @@ ${sectionPrompt}`,
         ];
         try {
             await streamDeepSeekTurn(apiKey, messages, false, (delta) => emit({ type: 'text', delta }), signal);
-            emit({ type: 'step', id: 'draft', label: 'Drafting captions with DeepSeek', status: 'done' });
+            emit({ type: 'step', id: 'draft', label: 'Drafting captions with Ondie', status: 'done' });
             emit({ type: 'done', refused: false });
         }
         catch (err) {
             if (signal?.aborted)
                 return;
-            emit({ type: 'step', id: 'draft', label: 'Drafting captions with DeepSeek', status: 'error' });
-            emit({ type: 'error', error: err?.message || 'Failed to draft captions.' });
+            console.error('[OndieService streamCaptions error]:', err);
+            emit({ type: 'step', id: 'draft', label: 'Drafting captions with Ondie', status: 'error' });
+            emit({ type: 'error', error: 'Ondie couldn’t draft captions right now. Please try again.' });
+        }
+    }
+    static async streamEditorialPitch(projectId, reqBody, emit, signal) {
+        const apiKey = env_js_1.env.DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY;
+        if (!apiKey) {
+            console.error('[OndieService] Missing AI API key in server/.env');
+            emit({ type: 'error', error: 'Ondie is temporarily unavailable right now. Please try again shortly.' });
+            return;
+        }
+        const project = await prisma_js_1.prisma.project.findUnique({
+            where: { id: projectId },
+            include: {
+                user: {
+                    include: {
+                        artists: {
+                            include: {
+                                songs: {
+                                    orderBy: { createdAt: 'desc' },
+                                    take: 10,
+                                },
+                            },
+                        },
+                        projects: {
+                            orderBy: { updatedAt: 'desc' },
+                            take: 6,
+                            include: {
+                                songs: { take: 5 },
+                            },
+                        },
+                        campaigns: {
+                            orderBy: { createdAt: 'desc' },
+                            take: 5,
+                        },
+                        waitlistDraft: true,
+                    },
+                },
+                songs: { include: { artist: true }, orderBy: { createdAt: 'asc' } },
+                vaultItems: { orderBy: { uploadedAt: 'desc' } },
+                calendarEvents: { orderBy: { date: 'asc' } },
+                chats: {
+                    orderBy: { updatedAt: 'desc' },
+                    take: 3,
+                    include: {
+                        messages: {
+                            where: { role: 'user' },
+                            orderBy: { createdAt: 'desc' },
+                            take: 6,
+                        },
+                    },
+                },
+            },
+        });
+        if (!project) {
+            emit({ type: 'error', error: 'Project not found.' });
+            return;
+        }
+        // Pull any onboarding / waitlist submission matched by email for extra taste/story context
+        const waitlistSubmission = project.user?.email
+            ? await prisma_js_1.prisma.waitlistSubmission
+                .findFirst({
+                where: { email: project.user.email },
+                orderBy: { createdAt: 'desc' },
+            })
+                .catch(() => null)
+            : null;
+        emit({ type: 'step', id: 'pitch', label: 'Reading your song, artist style, and schedule', status: 'active' });
+        const todayIso = toIsoDate(new Date());
+        const releaseIso = project.releaseTargetDate ? toIsoDate(project.releaseTargetDate) : null;
+        const daysToRelease = releaseIso ? daysBetweenIso(todayIso, releaseIso) : null;
+        const meta = (project.metadata && typeof project.metadata === 'object' ? project.metadata : {});
+        const roles = meta.roles && typeof meta.roles === 'object' ? meta.roles : {};
+        const lyrics = typeof meta.lyrics === 'string' && meta.lyrics.trim() ? meta.lyrics.trim() : null;
+        const primaryArtist = project.songs[0]?.artist || project.user?.artists?.[0] || null;
+        const artistName = primaryArtist?.name || project.user?.name || 'the artist';
+        const artistCountry = primaryArtist?.country || null;
+        const artistBio = primaryArtist?.bio || null;
+        const artistGenres = new Set(primaryArtist?.genres || []);
+        // Collect musical DNA across all of the artist's songs & past projects
+        const similarArtists = new Set();
+        const vibes = [];
+        const subgenres = new Set();
+        const catalogTitles = [];
+        const allSongs = [
+            ...project.songs,
+            ...(project.user?.artists?.flatMap((a) => a.songs) || []),
+            ...(project.user?.projects?.flatMap((p) => p.songs) || []),
+        ];
+        const seenSongIds = new Set();
+        for (const s of allSongs) {
+            if (seenSongIds.has(s.id))
+                continue;
+            seenSongIds.add(s.id);
+            if (s.genre)
+                artistGenres.add(s.genre);
+            for (const sg of s.subgenres || [])
+                if (sg)
+                    subgenres.add(sg);
+            for (const sa of s.similarArtists || [])
+                if (sa)
+                    similarArtists.add(sa);
+            if (s.soundVibe)
+                vibes.push(s.soundVibe);
+            if (s.projectId !== project.id && s.title)
+                catalogTitles.push(`${s.title}${s.genre ? ` (${s.genre})` : ''}`);
+        }
+        for (const c of project.user?.campaigns || []) {
+            for (const g of c.targetGenres || [])
+                if (g)
+                    artistGenres.add(g);
+            for (const sa of c.similarArtists || [])
+                if (sa)
+                    similarArtists.add(sa);
+            if (c.soundVibe)
+                vibes.push(c.soundVibe);
+        }
+        const songsInProject = project.songs.map((s) => {
+            const parts = [`"${s.title}"`];
+            if (s.genre)
+                parts.push(`genre: ${s.genre}`);
+            if (s.subgenres?.length)
+                parts.push(`subgenres: ${s.subgenres.join(', ')}`);
+            if (s.bpm)
+                parts.push(`${s.bpm} BPM`);
+            if (s.soundVibe)
+                parts.push(`vibe/mood: ${s.soundVibe}`);
+            if (s.similarArtists?.length)
+                parts.push(`sounds like / fans of: ${s.similarArtists.join(', ')}`);
+            const audioName = s.metadata?.audioFileName;
+            if (audioName)
+                parts.push(`master file: ${audioName}`);
+            return `- ${parts.join(' | ')}`;
+        });
+        const vaultLines = project.vaultItems.map((v) => {
+            const role = roles[v.fileUrl || v.id] || v.type;
+            return `- ${v.name} (${role})`;
+        });
+        const scheduleLines = project.calendarEvents.slice(0, 14).map((e) => {
+            const d = toIsoDate(e.date);
+            const plats = e.platforms?.length ? ` [${e.platforms.join(', ')}]` : '';
+            return `- ${d}: ${e.title}${plats}${e.why ? ` — ${e.why}` : ''}`;
+        });
+        const recentArtistNotes = project.chats
+            .flatMap((c) => c.messages.map((m) => m.text.trim()))
+            .filter((t) => t.length > 10 && !/^plan my release/i.test(t))
+            .slice(0, 5);
+        const draftData = project.user?.waitlistDraft?.data && typeof project.user.waitlistDraft.data === 'object'
+            ? project.user.waitlistDraft.data
+            : null;
+        const targetLength = reqBody.length === 'short' ? 'short' : 'full';
+        const charGoal = targetLength === 'short'
+            ? '190 to 270 characters (punchy, ultra-tight, NEVER exceed 290 characters)'
+            : '340 to 465 characters (rich, vivid, STRICTLY under 485 characters — Spotify hard-caps editorial pitches at 500 characters)';
+        const contextBlock = [
+            `Artist: ${artistName}${artistCountry ? ` (based in ${artistCountry})` : ''}`,
+            artistBio ? `Artist bio: ${artistBio}` : null,
+            artistGenres.size ? `Artist genres / style: ${[...artistGenres].join(', ')}` : null,
+            subgenres.size ? `Subgenres: ${[...subgenres].join(', ')}` : null,
+            similarArtists.size ? `Sonic references / artists they sound like or love: ${[...similarArtists].join(', ')}` : null,
+            vibes.length ? `Sound vibe & mood notes: ${[...new Set(vibes)].join(' ; ')}` : null,
+            catalogTitles.length ? `Other songs by this artist: ${catalogTitles.slice(0, 6).join(', ')}` : null,
+            `Project being pitched: "${project.name}" (${project.releaseType || 'SINGLE'})`,
+            `Today: ${todayIso} | Release date: ${releaseIso || 'Not set yet'}${daysToRelease !== null ? ` (${daysToRelease} days away)` : ''}`,
+            songsInProject.length ? `Songs on this release:\n${songsInProject.join('\n')}` : 'Songs on this release: Same as project title.',
+            lyrics ? `Lyrics / story excerpt:\n${lyrics.slice(0, 700)}` : null,
+            vaultLines.length ? `Vault assets ready:\n${vaultLines.join('\n')}` : null,
+            scheduleLines.length ? `Planned release schedule & promo moments:\n${scheduleLines.join('\n')}` : 'Release schedule: No calendar events saved yet.',
+            recentArtistNotes.length ? `What the artist recently shared in Ondie chat:\n${recentArtistNotes.map((n) => `- ${n.slice(0, 220)}`).join('\n')}` : null,
+            waitlistSubmission?.goldmineAnswer ? `Artist background / story note: ${waitlistSubmission.goldmineAnswer}` : null,
+            draftData && Object.keys(draftData).length ? `Artist onboarding notes: ${JSON.stringify(draftData).slice(0, 400)}` : null,
+            reqBody.pitchRecord?.length
+                ? `Curators already pitched: ${reqBody.pitchRecord.map((p) => p.target).join(', ')}`
+                : null,
+            reqBody.existingDraft?.trim()
+                ? `Artist's current pitch text in the box (use as inspiration or elevate/tighten it into a fresh suggestion): "${reqBody.existingDraft.trim()}"`
+                : null,
+        ]
+            .filter(Boolean)
+            .join('\n');
+        const messages = [
+            {
+                role: 'system',
+                content: `You are Ondie, writing a Spotify Editorial & playlist curator pitch for an independent artist.
+
+RULES:
+- Output ONLY the pitch text itself — no greetings ("Hey editors"), no labels ("Pitch:"), no surrounding quotation marks, no bullet points, no markdown, no hashtags, no emojis.
+- Target length: ${charGoal}. NEVER exceed 490 characters.
+- Write in natural, vivid, grounded editorial language that playlist curators actually respect:
+  1. Immediately anchor the song's sound, instrumentation/mood, and story/emotion (pulling from the artist's real genre, vibe, lyrics, and references).
+  2. Mention 1-2 sonic reference points ("for fans of...") ONLY if present in the context or clearly implied by the genre/vibe.
+  3. Close with one concrete sentence about the release moment / rollout plan (drawing from their actual release date, vault video/assets, or scheduled promo moments — never invent fake streaming numbers, fake press, or fake label backing).
+- Every word must feel tailored to THIS specific artist and THIS specific release.`,
+            },
+            {
+                role: 'user',
+                content: `Draft a ${targetLength === 'short' ? 'short, punchy' : 'complete, compelling'} playlist pitch for "${project.name}" using all of this real artist & project context:\n\n${contextBlock}`,
+            },
+        ];
+        try {
+            let emitted = 0;
+            await streamDeepSeekTurn(apiKey, messages, false, (delta) => {
+                // Strip accidental leading/trailing quotes if the model wraps output
+                let clean = delta;
+                if (emitted === 0)
+                    clean = clean.replace(/^["“']/, '');
+                emitted += clean.length;
+                if (clean)
+                    emit({ type: 'text', delta: clean });
+            }, signal);
+            emit({ type: 'step', id: 'pitch', label: 'Pitch draft ready', status: 'done' });
+            emit({ type: 'done', refused: false });
+        }
+        catch (err) {
+            if (signal?.aborted)
+                return;
+            console.error('[OndieService streamEditorialPitch error]:', err);
+            emit({ type: 'step', id: 'pitch', label: 'Drafting pitch with Ondie', status: 'error' });
+            emit({ type: 'error', error: 'Ondie couldn’t draft your pitch right now. Please try again.' });
         }
     }
 }

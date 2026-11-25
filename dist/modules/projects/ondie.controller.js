@@ -5,6 +5,7 @@ exports.updateOndieMessage = updateOndieMessage;
 exports.deleteOndieChat = deleteOndieChat;
 exports.streamOndieChat = streamOndieChat;
 exports.streamOndieCaptions = streamOndieCaptions;
+exports.streamOndiePitch = streamOndiePitch;
 const ondie_service_js_1 = require("./ondie.service.js");
 async function getOndieChats(req, res) {
     try {
@@ -111,6 +112,42 @@ async function streamOndieCaptions(req, res) {
     catch (error) {
         if (!controller.signal.aborted) {
             emit({ type: 'error', error: error?.message || 'Failed to draft captions' });
+        }
+    }
+    finally {
+        if (!res.writableEnded)
+            res.end();
+    }
+}
+async function streamOndiePitch(req, res) {
+    const projectId = String(req.params.id);
+    const { length, existingDraft, pitchRecord } = req.body || {};
+    res.status(200);
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    const controller = new AbortController();
+    res.on('close', () => {
+        if (!res.writableEnded)
+            controller.abort();
+    });
+    const emit = (event) => {
+        if (!res.writableEnded) {
+            res.write(`${JSON.stringify(event)}\n`);
+        }
+    };
+    try {
+        await ondie_service_js_1.OndieService.streamEditorialPitch(projectId, {
+            length: length === 'short' ? 'short' : 'full',
+            existingDraft: typeof existingDraft === 'string' ? existingDraft : undefined,
+            pitchRecord: Array.isArray(pitchRecord) ? pitchRecord : undefined,
+        }, emit, controller.signal);
+    }
+    catch (error) {
+        if (!controller.signal.aborted) {
+            emit({ type: 'error', error: error?.message || 'Failed to draft editorial pitch' });
         }
     }
     finally {

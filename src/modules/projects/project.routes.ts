@@ -21,6 +21,7 @@ import {
   updateOndieMessage,
   deleteOndieChat,
   streamOndieCaptions,
+  streamOndiePitch,
 } from './ondie.controller.js'
 import { requireAuth } from '../../middleware/authMiddleware.js'
 
@@ -58,5 +59,6 @@ router.delete('/:id/ondie/chats/:chatId', deleteOndieChat)
 router.post('/:id/ondie/chat', streamOndieChat)
 router.patch('/:id/ondie/messages/:messageId', updateOndieMessage)
 router.post('/:id/ondie/captions', streamOndieCaptions)
+router.post('/:id/ondie/pitch', streamOndiePitch)
 
 export default router

@@ -36,4 +36,5 @@ router.delete('/:id/ondie/chats/:chatId', ondie_controller_js_1.deleteOndieChat)
 router.post('/:id/ondie/chat', ondie_controller_js_1.streamOndieChat);
 router.patch('/:id/ondie/messages/:messageId', ondie_controller_js_1.updateOndieMessage);
 router.post('/:id/ondie/captions', ondie_controller_js_1.streamOndieCaptions);
+router.post('/:id/ondie/pitch', ondie_controller_js_1.streamOndiePitch);
 exports.default = router;
