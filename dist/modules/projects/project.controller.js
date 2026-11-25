@@ -8,6 +8,8 @@ exports.addSongToProject = addSongToProject;
 exports.addVaultItemToProject = addVaultItemToProject;
 exports.uploadVaultFileToProject = uploadVaultFileToProject;
 exports.deleteVaultItemFromProject = deleteVaultItemFromProject;
+exports.renameVaultItemInProject = renameVaultItemInProject;
+exports.renameSongInProject = renameSongInProject;
 exports.getCalendarEvents = getCalendarEvents;
 exports.addCalendarEventToProject = addCalendarEventToProject;
 exports.batchAddCalendarEvents = batchAddCalendarEvents;
@@ -211,6 +213,40 @@ async function deleteVaultItemFromProject(req, res) {
     catch (error) {
         console.error('[deleteVaultItemFromProject error]:', error);
         res.status(500).json({ success: false, message: error.message || 'Failed to delete vault item' });
+    }
+}
+async function renameVaultItemInProject(req, res) {
+    try {
+        const projectId = String(req.params.id);
+        const vaultItemId = String(req.params.vaultItemId);
+        const { name } = req.body || {};
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            res.status(400).json({ success: false, message: 'Name is required' });
+            return;
+        }
+        const result = await project_service_js_1.projectService.renameVaultItemInProject(projectId, vaultItemId, name);
+        res.status(200).json({ success: true, ...result });
+    }
+    catch (error) {
+        console.error('[renameVaultItemInProject error]:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to rename vault item' });
+    }
+}
+async function renameSongInProject(req, res) {
+    try {
+        const projectId = String(req.params.id);
+        const songId = String(req.params.songId);
+        const { title } = req.body || {};
+        if (!title || typeof title !== 'string' || !title.trim()) {
+            res.status(400).json({ success: false, message: 'Song title is required' });
+            return;
+        }
+        const song = await project_service_js_1.projectService.renameSongInProject(projectId, songId, title);
+        res.status(200).json({ success: true, song });
+    }
+    catch (error) {
+        console.error('[renameSongInProject error]:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to rename song' });
     }
 }
 async function getCalendarEvents(req, res) {

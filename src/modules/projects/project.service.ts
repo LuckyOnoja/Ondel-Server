@@ -672,6 +672,115 @@ export class ProjectService {
     }
   }
 
+  async renameVaultItemInProject(
+    projectId: string,
+    vaultItemId: string,
+    newName: string
+  ): Promise<{ vaultItem: ProjectVaultItemDto; song?: ProjectSongDto }> {
+    const clean = newName.trim()
+    if (!clean) throw new Error('Name cannot be empty')
+
+    const item = await prisma.vaultItem.findFirst({
+      where: { id: vaultItemId, projectId },
+    })
+    if (!item) throw new Error('Vault item not found in project')
+
+    const updated = await prisma.vaultItem.update({
+      where: { id: item.id },
+      data: { name: clean },
+    })
+
+    let updatedSongDto: ProjectSongDto | undefined
+    if (item.type === 'master' && item.fileUrl) {
+      const cleanSongTitle = clean.replace(/\.[^/.]+$/, '').trim() || clean
+      const linked = await prisma.song.findFirst({
+        where: { projectId, audioUrl: item.fileUrl },
+        include: { artist: true },
+      })
+      if (linked) {
+        const s = await prisma.song.update({
+          where: { id: linked.id },
+          data: { title: cleanSongTitle },
+          include: { artist: true },
+        })
+        updatedSongDto = {
+          id: s.id,
+          slug: s.slug || undefined,
+          title: s.title,
+          artistName: s.artist?.name || 'Artist',
+          audioUrl: s.audioUrl || undefined,
+          audioFileName: clean,
+          status: 'Strategy Ready',
+          releaseDate: toIsoDate(s.createdAt),
+          campaignsCount: 0,
+          gradient: s.gradient || undefined,
+          genre: s.genre,
+          subgenres: s.subgenres || [],
+          similarArtists: s.similarArtists || [],
+          bpm: s.bpm || undefined,
+        }
+      }
+    }
+
+    return {
+      vaultItem: {
+        id: updated.id,
+        slug: updated.slug || undefined,
+        name: updated.name,
+        type: updated.type as ProjectVaultItemDto['type'],
+        size: updated.size,
+        uploadedAt: toIsoDate(updated.uploadedAt),
+        fileUrl: updated.fileUrl || undefined,
+      },
+      song: updatedSongDto,
+    }
+  }
+
+  async renameSongInProject(
+    projectId: string,
+    songId: string,
+    newTitle: string
+  ): Promise<ProjectSongDto> {
+    const clean = newTitle.trim()
+    if (!clean) throw new Error('Song title cannot be empty')
+
+    const existing = await prisma.song.findFirst({
+      where: { id: songId, projectId },
+      include: { artist: true },
+    })
+    if (!existing) throw new Error('Song not found in project')
+
+    const updated = await prisma.song.update({
+      where: { id: existing.id },
+      data: { title: clean },
+      include: { artist: true },
+    })
+
+    if (existing.audioUrl) {
+      await prisma.vaultItem.updateMany({
+        where: { projectId, fileUrl: existing.audioUrl },
+        data: { name: clean },
+      })
+    }
+
+    return {
+      id: updated.id,
+      slug: updated.slug || undefined,
+      title: updated.title,
+      artistName: updated.artist?.name || 'Artist',
+      audioUrl: updated.audioUrl || undefined,
+      audioFileName: (updated.metadata as any)?.audioFileName || updated.title,
+      status: 'Strategy Ready',
+      releaseDate: toIsoDate(updated.createdAt),
+      campaignsCount: 0,
+      gradient: updated.gradient || undefined,
+      genre: updated.genre,
+      subgenres: updated.subgenres || [],
+      similarArtists: updated.similarArtists || [],
+      bpm: updated.bpm || undefined,
+    }
+  }
+
   async deleteVaultItemFromProject(
     userIdOrEmail: string,
     projectId: string,

@@ -20,9 +20,11 @@ router.post('/', project_controller_js_1.createProject);
 router.post('/upload', upload.single('file'), project_controller_js_1.uploadMediaToCloudinary);
 router.patch('/:id', project_controller_js_1.updateProject);
 router.post('/:id/songs', project_controller_js_1.addSongToProject);
+router.patch('/:id/songs/:songId', project_controller_js_1.renameSongInProject);
 // Vault
 router.post('/:id/vault', project_controller_js_1.addVaultItemToProject);
 router.post('/:id/vault/upload', upload.single('file'), project_controller_js_1.uploadVaultFileToProject);
+router.patch('/:id/vault/:vaultItemId', project_controller_js_1.renameVaultItemInProject);
 router.delete('/:id/vault/:vaultItemId', project_controller_js_1.deleteVaultItemFromProject);
 // Calendar Events
 router.get('/:id/events', project_controller_js_1.getCalendarEvents);

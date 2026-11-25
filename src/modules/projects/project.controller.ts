@@ -245,6 +245,40 @@ export async function deleteVaultItemFromProject(req: AuthRequest, res: Response
   }
 }
 
+export async function renameVaultItemInProject(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const projectId = String(req.params.id)
+    const vaultItemId = String(req.params.vaultItemId)
+    const { name } = req.body || {}
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({ success: false, message: 'Name is required' })
+      return
+    }
+    const result = await projectService.renameVaultItemInProject(projectId, vaultItemId, name)
+    res.status(200).json({ success: true, ...result })
+  } catch (error: any) {
+    console.error('[renameVaultItemInProject error]:', error)
+    res.status(500).json({ success: false, message: error.message || 'Failed to rename vault item' })
+  }
+}
+
+export async function renameSongInProject(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const projectId = String(req.params.id)
+    const songId = String(req.params.songId)
+    const { title } = req.body || {}
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      res.status(400).json({ success: false, message: 'Song title is required' })
+      return
+    }
+    const song = await projectService.renameSongInProject(projectId, songId, title)
+    res.status(200).json({ success: true, song })
+  } catch (error: any) {
+    console.error('[renameSongInProject error]:', error)
+    res.status(500).json({ success: false, message: error.message || 'Failed to rename song' })
+  }
+}
+
 export async function getCalendarEvents(req: AuthRequest, res: Response): Promise<void> {
   try {
     const projectId = String(req.params.id)

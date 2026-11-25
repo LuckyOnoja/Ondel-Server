@@ -63,6 +63,7 @@ function sanitizePlan(raw, todayIso, releaseIso) {
             platforms: [...new Set(platforms)],
             why,
             ...(typeof item.caption === 'string' && item.caption.trim() ? { caption: item.caption.trim() } : {}),
+            ...(typeof item.songTitle === 'string' && item.songTitle.trim() ? { songTitle: item.songTitle.trim().slice(0, 80) } : {}),
         });
     }
     items.sort((a, b) => a.date.localeCompare(b.date));
@@ -213,6 +214,10 @@ const DEEPSEEK_TOOLS = [
                                 caption: {
                                     type: 'string',
                                     description: 'Optional short draft caption or pitch angle the artist can edit.',
+                                },
+                                songTitle: {
+                                    type: 'string',
+                                    description: 'Optional: for a multi-song project (EP/album), the exact song title from the tracklist this item focuses on (omit for whole-project moments).',
                                 },
                             },
                             required: ['date', 'title', 'kind', 'platforms', 'why'],
@@ -425,6 +430,7 @@ class OndieService {
         const meta = (project.metadata && typeof project.metadata === 'object' ? project.metadata : {});
         const roles = meta.roles && typeof meta.roles === 'object' ? meta.roles : {};
         const lyrics = typeof meta.lyrics === 'string' && meta.lyrics.trim() ? meta.lyrics.trim() : null;
+        const lyricsBySong = meta.lyricsBySong && typeof meta.lyricsBySong === 'object' ? meta.lyricsBySong : {};
         const artistName = project.songs[0]?.artist?.name ||
             project.user?.artists?.[0]?.name ||
             project.user?.name ||
@@ -443,30 +449,78 @@ class OndieService {
             const role = roles[v.fileUrl || v.id] || v.type;
             return `- ${v.name} (type: ${v.type}, role: ${role}, size: ${v.size})`;
         });
-        const songsSummary = project.songs.map((s) => {
-            const parts = [`"${s.title}"`];
+        // Build a unified, deduplicated tracklist combining `project.songs` and audio tracks in `project.vaultItems`
+        const trackList = [];
+        const seenAudioUrls = new Set();
+        const seenTrackTitles = new Set();
+        const lookupTrackLyrics = (keys) => {
+            for (const k of keys) {
+                if (!k)
+                    continue;
+                const found = lyricsBySong[k];
+                if (typeof found === 'string' && found.trim())
+                    return found.trim();
+            }
+            return undefined;
+        };
+        for (const s of project.songs) {
+            if (s.audioUrl)
+                seenAudioUrls.add(s.audioUrl);
+            seenTrackTitles.add(s.title.trim().toLowerCase());
+            const details = [];
             if (s.genre)
-                parts.push(`genre: ${s.genre}`);
+                details.push(`genre: ${s.genre}`);
             if (s.subgenres?.length)
-                parts.push(`subgenres: ${s.subgenres.join(', ')}`);
+                details.push(`subgenres: ${s.subgenres.join(', ')}`);
             if (s.bpm)
-                parts.push(`${s.bpm} BPM`);
+                details.push(`${s.bpm} BPM`);
             if (s.soundVibe)
-                parts.push(`vibe: ${s.soundVibe}`);
+                details.push(`vibe: ${s.soundVibe}`);
             if (s.similarArtists?.length)
-                parts.push(`sounds like: ${s.similarArtists.join(', ')}`);
+                details.push(`sounds like: ${s.similarArtists.join(', ')}`);
             const audioName = s.metadata?.audioFileName;
             if (audioName)
-                parts.push(`audio file: ${audioName}`);
-            return `- ${parts.join(' | ')}`;
+                details.push(`file: ${audioName}`);
+            const trackLyrics = lookupTrackLyrics([s.audioUrl, `song:${s.id}`, s.id, s.title]);
+            trackList.push({ title: s.title, details, lyrics: trackLyrics });
+        }
+        for (const v of project.vaultItems) {
+            const role = roles[v.fileUrl || v.id] || v.type;
+            const isSongTrack = v.type === 'master' || role === 'master';
+            if (!isSongTrack)
+                continue;
+            if (v.fileUrl && seenAudioUrls.has(v.fileUrl))
+                continue;
+            const cleanTitle = v.name.replace(/\.[^/.]+$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim() || v.name;
+            if (seenTrackTitles.has(cleanTitle.toLowerCase()))
+                continue;
+            seenTrackTitles.add(cleanTitle.toLowerCase());
+            const trackLyrics = lookupTrackLyrics([v.fileUrl, v.id, cleanTitle, v.name]);
+            trackList.push({ title: cleanTitle, details: [`vault file: ${v.name}`], lyrics: trackLyrics });
+        }
+        const songsSummary = trackList.map((t, idx) => {
+            const info = t.details.length ? ` | ${t.details.join(' | ')}` : '';
+            const lyricNote = t.lyrics ? ` | lyrics saved (${t.lyrics.split('\n').filter(Boolean).length} lines)` : '';
+            return `${idx + 1}. "${t.title}"${info}${lyricNote}`;
         });
+        const perSongLyricsBlock = trackList
+            .filter((t) => t.lyrics)
+            .map((t) => `--- Lyrics for "${t.title}" ---\n${t.lyrics.slice(0, 800)}`)
+            .join('\n\n');
+        const combinedLyricsBlock = perSongLyricsBlock || (lyrics ? `--- Lyrics on file ---\n${lyrics.slice(0, 1200)}` : '');
+        const inferredScope = trackList.length === 0
+            ? 'No songs uploaded yet (could be a single, EP, or album)'
+            : trackList.length === 1
+                ? `1 song in the Vault ("${trackList[0].title}")`
+                : `Multi-song project with ${trackList.length} tracks in the Vault (${trackList.length >= 7 ? 'album-sized' : 'EP / multi-track project'})`;
         const calendarSummary = project.calendarEvents.map((e) => {
             const d = toIsoDate(e.date);
             const plats = e.platforms?.length ? ` [${e.platforms.join(', ')}]` : '';
+            const songNote = e.songTitle && e.songTitle !== project.name ? ` (song: ${e.songTitle})` : '';
             const status = e.postedAt || e.completed ? ' (done)' : '';
-            return `- ${d}: ${e.title}${plats}${status}`;
+            return `- ${d}: ${e.title}${songNote}${plats}${status}`;
         });
-        const hasMaster = project.vaultItems.some((v) => v.type === 'master' || roles[v.fileUrl || v.id] === 'master') || project.songs.some((s) => Boolean(s.audioUrl));
+        const hasMaster = trackList.length > 0;
         const hasCover = project.vaultItems.some((v) => v.type === 'artwork' || roles[v.fileUrl || v.id] === 'cover');
         const hasSplits = project.vaultItems.some((v) => roles[v.fileUrl || v.id] === 'splits' || /split/i.test(v.name)) || (Array.isArray(meta.skipped) && meta.skipped.includes('splits'));
         const usedIdeasBlock = usedContentIdeas.length
@@ -475,40 +529,49 @@ class OndieService {
                 .map((it, idx) => `${idx + 1}. ${it.title}${it.hook ? ` — ${it.hook}` : ''}`)
                 .join('\n')}`
             : '';
-        const systemPrompt = `You are Ondie, the intelligent release manager and creative director inside Ondel — an operating system for independent music artists preparing a Single, EP, or Album release.
+        const systemPrompt = `You are Ondie, the intelligent release manager and creative director inside Ondel — an operating system for independent music artists preparing a release (a single, EP, or album).
 
 LIVE PROJECT CONTEXT (from the artist's database):
 - Today's date: ${todayIso}
-- Project name: "${project.name}" (${project.releaseType || 'SINGLE'})
+- Project name: "${project.name}"
+- Release shape (inferred from Vault tracks — never force a label): ${inferredScope}
 - Artist: ${artistName}${artistCountry ? ` (${artistCountry})` : ''}${artistGenres ? ` · Genres: ${artistGenres}` : ''}
 ${artistBio ? `- Artist bio: ${artistBio}\n` : ''}- Release date: ${releaseIso ? `${releaseIso} (${daysToRelease === 0 ? 'today!' : daysToRelease > 0 ? `${daysToRelease} days from today` : `${Math.abs(daysToRelease)} days ago`})` : 'Not set yet'}
-- Setup readiness: Release date ${releaseIso ? 'SET' : 'MISSING'}, Master audio ${hasMaster ? 'UPLOADED' : 'MISSING'}, Cover art ${hasCover ? 'UPLOADED' : 'MISSING'}, Split sheet ${hasSplits ? 'DONE/NOT NEEDED' : 'MISSING'}
+- Setup readiness: Release date ${releaseIso ? 'SET' : 'MISSING'}, Songs/Audio ${hasMaster ? `${trackList.length} UPLOADED` : 'MISSING'}, Project cover ${hasCover ? 'UPLOADED' : 'MISSING'}, Split sheet ${hasSplits ? 'DONE/NOT NEEDED' : 'MISSING'}
 ${savedPitchDraft ? `- Editorial pitch on file: "${savedPitchDraft}"` : ''}
 
-TRACKS IN THIS PROJECT (${project.songs.length}):
+TRACKLIST IN THIS PROJECT (${trackList.length} ${trackList.length === 1 ? 'song' : 'songs'}):
 ${songsSummary.length ? songsSummary.join('\n') : '- None added yet (check Vault files below)'}
 
 FILES IN THE VAULT (${project.vaultItems.length}):
 ${vaultSummary.length ? vaultSummary.join('\n') : '- Vault is currently empty'}
-${lyrics ? `\nLYRICS ON FILE:\n${lyrics.slice(0, 1200)}` : ''}
+${combinedLyricsBlock ? `\nLYRICS BY SONG:\n${combinedLyricsBlock}` : ''}
 
 EXISTING CALENDAR EVENTS (${project.calendarEvents.length}):
 ${calendarSummary.length ? calendarSummary.join('\n') : '- Calendar is currently empty'}${usedIdeasBlock}
 
 HOW TO RESPOND:
-1. You have full awareness of the artist's project, tracks, Vault files, lyrics, editorial pitch, calendar, and past content ideas. Refer to their real project name ("${project.name}"), real songs, real Vault files, and real release date naturally — never use placeholder names or made-up files.
-2. Keep prose concise, sharp, practical, and easy to scan (short paragraphs or a clean numbered list). Avoid markdown headings (#) and excessive bolding (**).
-3. WHEN THE ARTIST ASKS TO PLAN THEIR RELEASE, SCHEDULE, ROLLOUT, OR RELEASE WEEK (or asks to revise a proposed plan):
+1. MULTI-SONG / EP / ALBUM AWARENESS (CRITICAL):
+   - A project is a flexible release space: it has a project name and cover image, and can hold 1 song OR multiple songs (an EP or album).
+   - If there is ONLY 1 song in TRACKLIST IN THIS PROJECT, you can naturally assume the artist means that song unless they specify otherwise.
+   - If there are 2 OR MORE songs in TRACKLIST IN THIS PROJECT, NEVER assume the project is just one song!
+     * When the artist asks for track-specific work (content ideas, video hooks, captions, curator pitch, promo angle) WITHOUT naming which song (or saying "the whole project"), briefly list their actual track names and ask which song they want to focus on — or if they want it for the entire "${project.name}" project.
+     * When the artist DOES name a specific song from the tracklist, pull that exact song's metadata & lyrics and tailor every detail to that song.
+     * When planning a release for a multi-song project, build a cohesive rollout that can highlight focus/lead track(s) AND the full project drop, tagging \`songTitle\` on track-specific plan items.
+2. Refer to their real project name ("${project.name}"), real track names, real Vault files, and real release date naturally — never use placeholder names or made-up files.
+3. Keep prose concise, sharp, practical, and easy to scan (short paragraphs or a clean numbered list). Avoid markdown headings (#) and excessive bolding (**).
+4. WHEN THE ARTIST ASKS TO PLAN THEIR RELEASE, SCHEDULE, ROLLOUT, OR RELEASE WEEK (or asks to revise a proposed plan):
    - Call the \`propose_release_plan\` tool with 8–16 concrete, dated items anchored to ${releaseIso || `a recommended release window starting after ${todayIso}`}.
    - Every item date MUST be on or after ${todayIso}.
    - If the release date is at least 7 days away, include a Spotify editorial pitch (kind: "pitch", platforms: ["spotify"]) at least 7 days before release, and a Countdown Page setup 7+ days before release.
    - Include a Release Day item on ${releaseIso || 'the target release day'} (if not already covered).
    - Never duplicate items already in EXISTING CALENDAR EVENTS.
-   - Tailor tasks to what is actually in or missing from their Vault (e.g., if cover art or stems are missing, remind them or schedule prep; if songs/stems/audio exist, reference them!).
+   - Tailor tasks to what is actually in or missing from their Vault (e.g., if cover art or stems are missing, remind them or schedule prep; if multiple songs exist, reference the real tracks!).
    - After calling \`propose_release_plan\`, give a brief 2-3 sentence overview explaining how the plan fits "${project.name}" and tell the artist they can edit any item below or reply to tweak it before clicking Add to calendar.
-4. DAILY CONTENT IDEAS & SETUP COACHING FLOW:
-   - If the artist says they want to make a content post today and has NOT yet described the song's vibe/mood, ask them warmly in 1–2 short sentences what kind of vibe "${project.name}" gives (e.g., moody late-night, high-energy, emotional, chill, storytelling, playful) before generating ideas.
-   - Once the artist tells you the song's vibe — OR asks for more / different / fresh content ideas — ALWAYS call \`propose_content_ideas\` with 10 distinct, relatable, everyday-doable content ideas tailored to "${project.name}" and that exact vibe.
+5. DAILY CONTENT IDEAS & SETUP COACHING FLOW:
+   - If this is a multi-song project (2+ tracks) and the artist hasn't specified which song (or the whole project) yet, ask them which track they want to promote today alongside its vibe.
+   - If the artist has not yet described the song's vibe/mood, ask them warmly in 1–2 short sentences what kind of vibe the song gives before generating ideas.
+   - Once the artist tells you the song's vibe — OR asks for more / different / fresh content ideas — ALWAYS call \`propose_content_ideas\` with 10 distinct, relatable, everyday-doable content ideas tailored to that exact song (and its lyrics/mood if on file) and vibe.
    - STRICT NON-REPETITION RULE: Never repeat, recycle, or slightly reword ANY idea from PREVIOUSLY SUGGESTED CONTENT IDEAS above or earlier in this chat. Every batch of 10 must explore genuinely fresh scenarios, POVs, emotions, and filming setups that real people connect with.
    - After calling \`propose_content_ideas\`, briefly invite the artist in 1–2 sentences to pick their favorite idea (or ask for 10 completely fresh ones if none click).
    - ONCE THE ARTIST CHOOSES A SPECIFIC IDEA (e.g. "I choose idea #3..."), DO NOT call \`propose_content_ideas\` again. Instead, switch into hands-on creative director mode and give a complete, practical shooting & acting breakdown so they can film it today:
@@ -517,21 +580,22 @@ HOW TO RESPOND:
      3. Shot-by-shot timing (0–3s hook, middle moment, closing beat)
      4. Song section to use + exact on-screen text + a natural caption ready to post
      End by asking what part they want to adapt (e.g., their room/lighting, outfit, lyric line, or camera angle) so you can keep refining it together.
-5. WHEN THE ARTIST ASKS FOR PLAYLISTS OR CURATORS:
+6. WHEN THE ARTIST ASKS FOR PLAYLISTS OR CURATORS:
    - Call \`search_playlists\` with a relevant genre/vibe query. Talk only about real returned results; never invent playlists or follower counts.
-6. WHEN THE ARTIST EXPLICITLY ASKS FOR A VIDEO STUDIO STORYBOARD:
+7. WHEN THE ARTIST EXPLICITLY ASKS FOR A VIDEO STUDIO STORYBOARD:
    - Call \`propose_storyboard\`.
-7. Never promise guaranteed streams, virality, or editorial placement — frame submissions honestly as pitches curators review.`;
+8. Never promise guaranteed streams, virality, or editorial placement — frame submissions honestly as pitches curators review.`;
         return {
             project,
             meta,
+            trackList,
             usedContentIdeas,
             todayIso,
             releaseIso,
             daysToRelease,
             artistName,
             systemPrompt,
-            contextDetail: `${project.name} · ${releaseIso ? `out ${releaseIso}` : 'date not set'} · ${project.vaultItems.length} vault ${project.vaultItems.length === 1 ? 'file' : 'files'} · ${project.calendarEvents.length} on calendar`,
+            contextDetail: `${project.name} · ${trackList.length} ${trackList.length === 1 ? 'song' : 'songs'} · ${releaseIso ? `out ${releaseIso}` : 'date not set'} · ${project.calendarEvents.length} on calendar`,
         };
     }
     static async getProjectChats(projectId) {
@@ -910,6 +974,16 @@ HOW TO RESPOND:
         const sectionPrompt = reqBody.sections
             .map((s) => `=== ${s.key}\n(${s.label}${s.limit ? `, max ${s.limit} chars` : ''})`)
             .join('\n');
+        const focusedTrack = reqBody.post.songTitle
+            ? ctx.trackList.find((t) => t.title.toLowerCase() === reqBody.post.songTitle.trim().toLowerCase())
+            : ctx.trackList.length === 1
+                ? ctx.trackList[0]
+                : undefined;
+        const trackContext = focusedTrack
+            ? `Specific song for this post: "${focusedTrack.title}"${focusedTrack.lyrics ? `\nLyrics excerpt:\n${focusedTrack.lyrics.slice(0, 500)}` : ''}`
+            : ctx.trackList.length > 1
+                ? `Tracks in this project: ${ctx.trackList.map((t) => `"${t.title}"`).join(', ')}`
+                : '';
         const messages = [
             {
                 role: 'system',
@@ -918,7 +992,7 @@ HOW TO RESPOND:
             {
                 role: 'user',
                 content: `Project: "${ctx.project.name}" by ${ctx.artistName}${ctx.releaseIso ? ` (out ${ctx.releaseIso})` : ''}.
-Post: "${reqBody.post.title}" scheduled for ${reqBody.post.when} on ${reqBody.post.platforms.join(', ')}.
+${trackContext ? `${trackContext}\n` : ''}Post: "${reqBody.post.title}" scheduled for ${reqBody.post.when} on ${reqBody.post.platforms.join(', ')}.
 Media attached: ${reqBody.post.media || 'none'}.
 Existing draft: ${reqBody.post.caption || 'none'}.
 
@@ -1008,7 +1082,12 @@ ${sectionPrompt}`,
         const daysToRelease = releaseIso ? daysBetweenIso(todayIso, releaseIso) : null;
         const meta = (project.metadata && typeof project.metadata === 'object' ? project.metadata : {});
         const roles = meta.roles && typeof meta.roles === 'object' ? meta.roles : {};
-        const lyrics = typeof meta.lyrics === 'string' && meta.lyrics.trim() ? meta.lyrics.trim() : null;
+        const lyricsBySong = meta.lyricsBySong && typeof meta.lyricsBySong === 'object' ? meta.lyricsBySong : {};
+        const combinedPerSongLyrics = Object.entries(lyricsBySong)
+            .filter(([, text]) => typeof text === 'string' && text.trim())
+            .map(([, text]) => text.trim())
+            .join('\n\n');
+        const lyrics = combinedPerSongLyrics || (typeof meta.lyrics === 'string' && meta.lyrics.trim() ? meta.lyrics.trim() : null);
         const primaryArtist = project.songs[0]?.artist || project.user?.artists?.[0] || null;
         const artistName = primaryArtist?.name || project.user?.name || 'the artist';
         const artistCountry = primaryArtist?.country || null;

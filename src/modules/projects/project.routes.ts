@@ -6,8 +6,10 @@ import {
   updateProject,
   uploadMediaToCloudinary,
   addSongToProject,
+  renameSongInProject,
   addVaultItemToProject,
   uploadVaultFileToProject,
+  renameVaultItemInProject,
   deleteVaultItemFromProject,
   getCalendarEvents,
   addCalendarEventToProject,
@@ -40,10 +42,12 @@ router.post('/', createProject)
 router.post('/upload', upload.single('file'), uploadMediaToCloudinary)
 router.patch('/:id', updateProject)
 router.post('/:id/songs', addSongToProject)
+router.patch('/:id/songs/:songId', renameSongInProject)
 
 // Vault
 router.post('/:id/vault', addVaultItemToProject)
 router.post('/:id/vault/upload', upload.single('file'), uploadVaultFileToProject)
+router.patch('/:id/vault/:vaultItemId', renameVaultItemInProject)
 router.delete('/:id/vault/:vaultItemId', deleteVaultItemFromProject)
 
 // Calendar Events
