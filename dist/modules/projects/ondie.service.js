@@ -88,6 +88,49 @@ function sanitizeStoryboard(raw, fallbackTitle) {
         caption: String(raw?.caption || `${fallbackTitle} — out soon.`).trim(),
     };
 }
+function normalizeIdeaKey(s) {
+    return s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+function sanitizeContentIdeas(raw, usedKeys, fallbackVibe) {
+    const vibe = String(raw?.vibe || fallbackVibe || 'Your song vibe').trim().slice(0, 80);
+    const intro = typeof raw?.intro === 'string' && raw.intro.trim()
+        ? raw.intro.trim()
+        : 'Pick the angle that feels most natural to shoot today — I’ll break down the full setup and acting for it.';
+    const rawIdeas = Array.isArray(raw?.ideas) ? raw.ideas : [];
+    const ideas = [];
+    const batchSeen = new Set();
+    const stamp = Date.now();
+    for (let i = 0; i < rawIdeas.length; i++) {
+        const it = rawIdeas[i];
+        if (!it || typeof it !== 'object')
+            continue;
+        const title = String(it.title || '').trim().slice(0, 90);
+        const hook = String(it.hook || '').trim().slice(0, 220);
+        if (!title || !hook)
+            continue;
+        const key = normalizeIdeaKey(title);
+        if (!key || batchSeen.has(key) || usedKeys.has(key))
+            continue;
+        batchSeen.add(key);
+        const rawPlatform = String(it.platform || 'tiktok').toLowerCase().trim();
+        const platform = VALID_PLATFORMS.has(rawPlatform) ? rawPlatform : 'tiktok';
+        const format = String(it.format || 'Short-form clip').trim().slice(0, 48);
+        const whyItWorks = String(it.whyItWorks || 'Easy to shoot with your phone and built around the song’s mood.').trim().slice(0, 200);
+        ideas.push({
+            id: `idea-${stamp}-${ideas.length + 1}`,
+            title,
+            hook,
+            format,
+            platform,
+            whyItWorks,
+        });
+    }
+    return { vibe, intro, ideas: ideas.slice(0, 10) };
+}
 async function searchSpotifyPlaylists(query, limit = 6) {
     const token = await spotify_service_js_1.SpotifyService.getAccessToken();
     if (!token)
@@ -232,6 +275,57 @@ const DEEPSEEK_TOOLS = [
             },
         },
     },
+    {
+        type: 'function',
+        function: {
+            name: 'propose_content_ideas',
+            description: 'Propose 10 fresh, relatable, everyday-shootable short-form content ideas for this music project once the artist shares the vibe of their song (or asks for a fresh batch of ideas). STRICTLY never repeat or reword any idea already listed in PREVIOUSLY SUGGESTED CONTENT IDEAS.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    vibe: {
+                        type: 'string',
+                        description: 'Short label for the song vibe the artist described (e.g. "Late-night & moody", "High-energy hype").',
+                    },
+                    intro: {
+                        type: 'string',
+                        description: 'One short sentence introducing this batch of 10 ideas.',
+                    },
+                    ideas: {
+                        type: 'array',
+                        description: 'Exactly 10 distinct, relatable, realistic content ideas an independent artist can film today with just a phone. Vary settings, storytelling angles, POVs, behind-the-scenes, and emotional hooks.',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                title: {
+                                    type: 'string',
+                                    description: 'Crisp, specific idea name (max 65 chars).',
+                                },
+                                hook: {
+                                    type: 'string',
+                                    description: 'The opening 3-second visual/text hook or relatable premise viewers immediately connect with.',
+                                },
+                                format: {
+                                    type: 'string',
+                                    description: 'Short format tag (e.g. "15s POV Reel", "Car-listen clip", "Lyric breakdown", "Studio raw take", "Storytime").',
+                                },
+                                platform: {
+                                    type: 'string',
+                                    enum: ['tiktok', 'instagram', 'youtube', 'threads', 'x'],
+                                },
+                                whyItWorks: {
+                                    type: 'string',
+                                    description: 'One concise sentence on why listeners will relate to or replay this.',
+                                },
+                            },
+                            required: ['title', 'hook', 'format', 'platform', 'whyItWorks'],
+                        },
+                    },
+                },
+                required: ['vibe', 'intro', 'ideas'],
+            },
+        },
+    },
 ];
 async function streamDeepSeekTurn(apiKey, messages, useTools, onTextDelta, signal) {
     const payload = {
@@ -335,6 +429,16 @@ class OndieService {
             project.user?.artists?.[0]?.name ||
             project.user?.name ||
             'Artist';
+        const primaryArtist = project.songs[0]?.artist || project.user?.artists?.[0] || null;
+        const artistBio = primaryArtist?.bio || null;
+        const artistCountry = primaryArtist?.country || null;
+        const artistGenres = primaryArtist?.genres?.length ? primaryArtist.genres.join(', ') : null;
+        const savedPitchDraft = meta.pitch && typeof meta.pitch === 'object' && typeof meta.pitch.draft === 'string' && meta.pitch.draft.trim()
+            ? meta.pitch.draft.trim()
+            : null;
+        const usedContentIdeas = Array.isArray(meta.usedContentIdeas)
+            ? meta.usedContentIdeas.filter((x) => x && typeof x.title === 'string')
+            : [];
         const vaultSummary = project.vaultItems.map((v) => {
             const role = roles[v.fileUrl || v.id] || v.type;
             return `- ${v.name} (type: ${v.type}, role: ${role}, size: ${v.size})`;
@@ -343,6 +447,8 @@ class OndieService {
             const parts = [`"${s.title}"`];
             if (s.genre)
                 parts.push(`genre: ${s.genre}`);
+            if (s.subgenres?.length)
+                parts.push(`subgenres: ${s.subgenres.join(', ')}`);
             if (s.bpm)
                 parts.push(`${s.bpm} BPM`);
             if (s.soundVibe)
@@ -363,14 +469,21 @@ class OndieService {
         const hasMaster = project.vaultItems.some((v) => v.type === 'master' || roles[v.fileUrl || v.id] === 'master') || project.songs.some((s) => Boolean(s.audioUrl));
         const hasCover = project.vaultItems.some((v) => v.type === 'artwork' || roles[v.fileUrl || v.id] === 'cover');
         const hasSplits = project.vaultItems.some((v) => roles[v.fileUrl || v.id] === 'splits' || /split/i.test(v.name)) || (Array.isArray(meta.skipped) && meta.skipped.includes('splits'));
-        const systemPrompt = `You are Ondie, the intelligent release manager inside Ondel — an operating system for independent music artists preparing a Single, EP, or Album release.
+        const usedIdeasBlock = usedContentIdeas.length
+            ? `\nPREVIOUSLY SUGGESTED CONTENT IDEAS FOR "${project.name}" (STRICTLY DO NOT REPEAT OR REWORD ANY OF THESE — every new idea must be genuinely fresh):\n${usedContentIdeas
+                .slice(-80)
+                .map((it, idx) => `${idx + 1}. ${it.title}${it.hook ? ` — ${it.hook}` : ''}`)
+                .join('\n')}`
+            : '';
+        const systemPrompt = `You are Ondie, the intelligent release manager and creative director inside Ondel — an operating system for independent music artists preparing a Single, EP, or Album release.
 
 LIVE PROJECT CONTEXT (from the artist's database):
 - Today's date: ${todayIso}
 - Project name: "${project.name}" (${project.releaseType || 'SINGLE'})
-- Artist: ${artistName}
-- Release date: ${releaseIso ? `${releaseIso} (${daysToRelease === 0 ? 'today!' : daysToRelease > 0 ? `${daysToRelease} days from today` : `${Math.abs(daysToRelease)} days ago`})` : 'Not set yet'}
+- Artist: ${artistName}${artistCountry ? ` (${artistCountry})` : ''}${artistGenres ? ` · Genres: ${artistGenres}` : ''}
+${artistBio ? `- Artist bio: ${artistBio}\n` : ''}- Release date: ${releaseIso ? `${releaseIso} (${daysToRelease === 0 ? 'today!' : daysToRelease > 0 ? `${daysToRelease} days from today` : `${Math.abs(daysToRelease)} days ago`})` : 'Not set yet'}
 - Setup readiness: Release date ${releaseIso ? 'SET' : 'MISSING'}, Master audio ${hasMaster ? 'UPLOADED' : 'MISSING'}, Cover art ${hasCover ? 'UPLOADED' : 'MISSING'}, Split sheet ${hasSplits ? 'DONE/NOT NEEDED' : 'MISSING'}
+${savedPitchDraft ? `- Editorial pitch on file: "${savedPitchDraft}"` : ''}
 
 TRACKS IN THIS PROJECT (${project.songs.length}):
 ${songsSummary.length ? songsSummary.join('\n') : '- None added yet (check Vault files below)'}
@@ -380,10 +493,10 @@ ${vaultSummary.length ? vaultSummary.join('\n') : '- Vault is currently empty'}
 ${lyrics ? `\nLYRICS ON FILE:\n${lyrics.slice(0, 1200)}` : ''}
 
 EXISTING CALENDAR EVENTS (${project.calendarEvents.length}):
-${calendarSummary.length ? calendarSummary.join('\n') : '- Calendar is currently empty'}
+${calendarSummary.length ? calendarSummary.join('\n') : '- Calendar is currently empty'}${usedIdeasBlock}
 
 HOW TO RESPOND:
-1. You have full awareness of the artist's project, tracks, Vault files, and calendar. Refer to their real project name ("${project.name}"), real songs, real Vault files, and real release date naturally — never use placeholder names or made-up files.
+1. You have full awareness of the artist's project, tracks, Vault files, lyrics, editorial pitch, calendar, and past content ideas. Refer to their real project name ("${project.name}"), real songs, real Vault files, and real release date naturally — never use placeholder names or made-up files.
 2. Keep prose concise, sharp, practical, and easy to scan (short paragraphs or a clean numbered list). Avoid markdown headings (#) and excessive bolding (**).
 3. WHEN THE ARTIST ASKS TO PLAN THEIR RELEASE, SCHEDULE, ROLLOUT, OR RELEASE WEEK (or asks to revise a proposed plan):
    - Call the \`propose_release_plan\` tool with 8–16 concrete, dated items anchored to ${releaseIso || `a recommended release window starting after ${todayIso}`}.
@@ -393,13 +506,26 @@ HOW TO RESPOND:
    - Never duplicate items already in EXISTING CALENDAR EVENTS.
    - Tailor tasks to what is actually in or missing from their Vault (e.g., if cover art or stems are missing, remind them or schedule prep; if songs/stems/audio exist, reference them!).
    - After calling \`propose_release_plan\`, give a brief 2-3 sentence overview explaining how the plan fits "${project.name}" and tell the artist they can edit any item below or reply to tweak it before clicking Add to calendar.
-4. WHEN THE ARTIST ASKS FOR PLAYLISTS OR CURATORS:
+4. DAILY CONTENT IDEAS & SETUP COACHING FLOW:
+   - If the artist says they want to make a content post today and has NOT yet described the song's vibe/mood, ask them warmly in 1–2 short sentences what kind of vibe "${project.name}" gives (e.g., moody late-night, high-energy, emotional, chill, storytelling, playful) before generating ideas.
+   - Once the artist tells you the song's vibe — OR asks for more / different / fresh content ideas — ALWAYS call \`propose_content_ideas\` with 10 distinct, relatable, everyday-doable content ideas tailored to "${project.name}" and that exact vibe.
+   - STRICT NON-REPETITION RULE: Never repeat, recycle, or slightly reword ANY idea from PREVIOUSLY SUGGESTED CONTENT IDEAS above or earlier in this chat. Every batch of 10 must explore genuinely fresh scenarios, POVs, emotions, and filming setups that real people connect with.
+   - After calling \`propose_content_ideas\`, briefly invite the artist in 1–2 sentences to pick their favorite idea (or ask for 10 completely fresh ones if none click).
+   - ONCE THE ARTIST CHOOSES A SPECIFIC IDEA (e.g. "I choose idea #3..."), DO NOT call \`propose_content_ideas\` again. Instead, switch into hands-on creative director mode and give a complete, practical shooting & acting breakdown so they can film it today:
+     1. Location & lighting setup (realistic everyday spot, phone placement, framing)
+     2. How to act & deliver it (energy, expression, eye contact, body language, lip-sync or silent reaction)
+     3. Shot-by-shot timing (0–3s hook, middle moment, closing beat)
+     4. Song section to use + exact on-screen text + a natural caption ready to post
+     End by asking what part they want to adapt (e.g., their room/lighting, outfit, lyric line, or camera angle) so you can keep refining it together.
+5. WHEN THE ARTIST ASKS FOR PLAYLISTS OR CURATORS:
    - Call \`search_playlists\` with a relevant genre/vibe query. Talk only about real returned results; never invent playlists or follower counts.
-5. WHEN THE ARTIST ASKS FOR SHORT-FORM VIDEO / TIKTOK / REEL IDEAS:
-   - Call \`propose_storyboard\` when they want a concrete shootable storyboard.
-6. Never promise guaranteed streams, virality, or editorial placement — frame submissions honestly as pitches curators review.`;
+6. WHEN THE ARTIST EXPLICITLY ASKS FOR A VIDEO STUDIO STORYBOARD:
+   - Call \`propose_storyboard\`.
+7. Never promise guaranteed streams, virality, or editorial placement — frame submissions honestly as pitches curators review.`;
         return {
             project,
+            meta,
+            usedContentIdeas,
             todayIso,
             releaseIso,
             daysToRelease,
@@ -448,6 +574,8 @@ HOW TO RESPOND:
                     planAdded: Boolean(payload.planAdded),
                     steps: Array.isArray(payload.steps) ? payload.steps : undefined,
                     storyboard: payload.storyboard ?? undefined,
+                    contentIdeas: payload.contentIdeas ?? undefined,
+                    chosenIdeaId: typeof payload.chosenIdeaId === 'string' ? payload.chosenIdeaId : null,
                 };
             }),
         }));
@@ -542,6 +670,14 @@ HOW TO RESPOND:
                     if (p.plan?.items?.length) {
                         assistantText += `\n\n[Proposed release plan (${p.plan.items.length} items${p.planAdded ? ', already added to calendar' : ', editable draft'}): ${p.plan.items.map((it) => `${it.date} ${it.title}`).join('; ')}]`;
                     }
+                    if (p.contentIdeas?.ideas?.length) {
+                        const chosen = p.chosenIdeaId
+                            ? p.contentIdeas.ideas.find((it) => it.id === p.chosenIdeaId)
+                            : null;
+                        assistantText += `\n\n[Suggested ${p.contentIdeas.ideas.length} content ideas for vibe "${p.contentIdeas.vibe}": ${p.contentIdeas.ideas
+                            .map((it, i) => `#${i + 1} ${it.title} (${it.hook})`)
+                            .join(' | ')}${chosen ? ` — Artist chose: "${chosen.title}"` : ''}]`;
+                    }
                     if (assistantText.trim())
                         historyTurns.push({ role: 'assistant', content: assistantText.trim() });
                 }
@@ -578,6 +714,8 @@ HOW TO RESPOND:
         let producedPlan;
         let producedPlaylists;
         let producedStoryboard;
+        let producedContentIdeas;
+        const usedIdeaKeys = new Set(ctx.usedContentIdeas.map((it) => normalizeIdeaKey(it.title)));
         emit({ type: 'step', id: 'think', label: 'Thinking through your release', status: 'active' });
         try {
             for (let round = 0; round < 3; round++) {
@@ -659,6 +797,46 @@ HOW TO RESPOND:
                             content: JSON.stringify({ ok: true, note: 'Storyboard shown to the artist. Briefly describe the concept in 1-2 sentences.' }),
                         });
                     }
+                    else if (tc.name === 'propose_content_ideas') {
+                        emit({ type: 'step', id: stepId, label: 'Coming up with fresh content ideas', status: 'active' });
+                        const batch = sanitizeContentIdeas(args, usedIdeaKeys, cleanText.slice(0, 60));
+                        producedContentIdeas = batch;
+                        // Immediately persist generated ideas into PostgreSQL project.metadata.usedContentIdeas
+                        // so Ondie NEVER repeats them on any future day or chat for this project.
+                        if (batch.ideas.length > 0) {
+                            const nowIso = new Date().toISOString();
+                            const newlyUsed = batch.ideas.map((it) => {
+                                usedIdeaKeys.add(normalizeIdeaKey(it.title));
+                                return { title: it.title, hook: it.hook, vibe: batch.vibe, createdAt: nowIso };
+                            });
+                            const nextUsed = [...ctx.usedContentIdeas, ...newlyUsed].slice(-200);
+                            ctx.usedContentIdeas.push(...newlyUsed);
+                            await prisma_js_1.prisma.project
+                                .update({
+                                where: { id: projectId },
+                                data: {
+                                    metadata: {
+                                        ...ctx.meta,
+                                        usedContentIdeas: nextUsed,
+                                    },
+                                },
+                            })
+                                .catch((err) => console.error('[OndieService] Failed to save usedContentIdeas:', err));
+                        }
+                        emit({ type: 'contentIdeas', contentIdeas: batch });
+                        const detail = `${batch.ideas.length} fresh ideas`;
+                        emit({ type: 'step', id: stepId, label: 'Coming up with fresh content ideas', status: 'done', detail });
+                        recordedSteps.push({ id: stepId, label: 'Coming up with fresh content ideas', status: 'done', detail });
+                        deepseekMessages.push({
+                            role: 'tool',
+                            tool_call_id: callId,
+                            content: JSON.stringify({
+                                ok: true,
+                                ideaCount: batch.ideas.length,
+                                note: 'The 10 fresh content ideas are now displayed interactively to the artist with Choose buttons and a "Give me 10 different ideas" button. In 1-2 short sentences, invite them to pick one for a full setup & acting breakdown or ask for another batch.',
+                            }),
+                        });
+                    }
                     else {
                         deepseekMessages.push({
                             role: 'tool',
@@ -670,6 +848,11 @@ HOW TO RESPOND:
             }
             if (!fullText.trim() && producedPlan) {
                 const fallbackNote = `I put together a ${producedPlan.items.length}-item release plan for ${ctx.project.name}. You can edit any date, title, or platform below — or reply with changes — then click Add to calendar when you're ready.`;
+                fullText = fallbackNote;
+                emit({ type: 'text', delta: fallbackNote });
+            }
+            else if (!fullText.trim() && producedContentIdeas) {
+                const fallbackNote = `Here are ${producedContentIdeas.ideas.length} fresh, relatable content ideas for ${ctx.project.name}. Pick the one you want to shoot today and I’ll walk you through the full setup and how to act it — or tell me if you want 10 completely different ones.`;
                 fullText = fallbackNote;
                 emit({ type: 'text', delta: fallbackNote });
             }
@@ -687,6 +870,8 @@ HOW TO RESPOND:
                         playlists: producedPlaylists ? producedPlaylists : undefined,
                         playlistSource: producedPlaylists?.length ? 'spotify' : undefined,
                         storyboard: producedStoryboard ? producedStoryboard : undefined,
+                        contentIdeas: producedContentIdeas ? producedContentIdeas : undefined,
+                        chosenIdeaId: null,
                         steps: recordedSteps,
                         feedback: null,
                         taken: [],
