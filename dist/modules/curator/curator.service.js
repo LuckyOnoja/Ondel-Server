@@ -313,14 +313,159 @@ class CuratorService {
     }
     static async listPublicCurators() {
         const profiles = await prisma_js_1.prisma.curatorProfile.findMany({
-            where: { acceptsSubmissions: true },
-            orderBy: [{ verified: 'desc' }, { totalFollowers: 'desc' }, { createdAt: 'desc' }],
-            take: 60,
+            orderBy: [{ acceptsSubmissions: 'desc' }, { verified: 'desc' }, { totalFollowers: 'desc' }, { createdAt: 'desc' }],
+            take: 100,
+            include: {
+                user: {
+                    select: {
+                        avatarUrl: true,
+                        name: true,
+                    },
+                },
+                submissions: {
+                    orderBy: { updatedAt: 'desc' },
+                    select: {
+                        id: true,
+                        status: true,
+                        songTitle: true,
+                        artistName: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                },
+            },
         });
-        return profiles.map((p) => ({
-            ...p,
-            playlists: sanitizePlaylists(p.playlists),
-        }));
+        return profiles.map((p) => {
+            const playlists = sanitizePlaylists(p.playlists);
+            const received = p.submissions.length;
+            const repliedSubs = p.submissions.filter((s) => s.status === 'ADDED' || s.status === 'DECLINED');
+            const replied = repliedSubs.length;
+            let medianDays = 3;
+            if (repliedSubs.length > 0) {
+                const diffs = repliedSubs
+                    .map((s) => Math.max(1, Math.round((s.updatedAt.getTime() - s.createdAt.getTime()) / 86_400_000)))
+                    .sort((a, b) => a - b);
+                medianDays = diffs[Math.floor(diffs.length / 2)];
+            }
+            const recentAdds = p.submissions
+                .filter((s) => s.status === 'ADDED')
+                .slice(0, 5)
+                .map((s) => ({
+                title: s.songTitle,
+                artist: s.artistName,
+                addedAt: s.updatedAt.toISOString().slice(0, 10),
+            }));
+            return {
+                id: p.id,
+                handle: p.handle,
+                curatorName: p.curatorName,
+                organization: p.organization,
+                photo: p.user?.avatarUrl || null,
+                bio: p.bio,
+                city: p.city,
+                country: p.country,
+                platforms: p.platforms,
+                genres: p.genres,
+                moods: p.moods,
+                playlists,
+                totalFollowers: Math.max(p.totalFollowers, playlists.reduce((sum, pl) => sum + (pl.followers || 0), 0)),
+                acceptsSubmissions: p.acceptsSubmissions,
+                responseTime: p.responseTime,
+                guidelines: p.guidelines,
+                verified: p.verified,
+                record: received > 0 ? { replied, received, medianDays } : null,
+                recentAdds,
+            };
+        });
+    }
+    static async submitPitchToCurator(userId, handle, input) {
+        const curator = await prisma_js_1.prisma.curatorProfile.findUnique({ where: { handle } });
+        if (!curator) {
+            throw new Error('Curator not found.');
+        }
+        if (!curator.acceptsSubmissions) {
+            throw new Error('This curator is not accepting submissions right now.');
+        }
+        const songTitle = input.songTitle?.trim();
+        if (!songTitle) {
+            throw new Error('Song title is required to send a pitch.');
+        }
+        const sender = await prisma_js_1.prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true, name: true },
+        });
+        const playlists = sanitizePlaylists(curator.playlists);
+        const targetPlaylist = input.targetPlaylist?.trim() || playlists[0]?.name || null;
+        // Avoid duplicate active pitch for the same song & curator from the same artist
+        const existing = await prisma_js_1.prisma.curatorSubmission.findFirst({
+            where: {
+                curatorId: curator.id,
+                artistUserId: userId,
+                songTitle,
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+        if (existing) {
+            return existing;
+        }
+        return prisma_js_1.prisma.curatorSubmission.create({
+            data: {
+                curatorId: curator.id,
+                artistUserId: userId,
+                artistName: input.artistName?.trim() || sender?.name || sender?.email?.split('@')[0] || 'Artist',
+                artistEmail: sender?.email || null,
+                songTitle,
+                genre: input.genre?.trim() || null,
+                pitchNote: input.pitchNote?.trim() || null,
+                audioUrl: input.audioUrl?.trim() || null,
+                spotifyUrl: input.spotifyUrl?.trim() || null,
+                appleMusicUrl: input.appleMusicUrl?.trim() || null,
+                targetPlaylist,
+                status: 'NEW',
+            },
+        });
+    }
+    static async getArtistPitches(userId) {
+        const subs = await prisma_js_1.prisma.curatorSubmission.findMany({
+            where: { artistUserId: userId },
+            orderBy: { createdAt: 'desc' },
+            include: {
+                curator: {
+                    select: {
+                        handle: true,
+                        curatorName: true,
+                        playlists: true,
+                    },
+                },
+            },
+        });
+        return subs.map((s) => {
+            const playlists = sanitizePlaylists(s.curator.playlists);
+            return {
+                id: s.id,
+                curatorHandle: s.curator.handle,
+                curatorName: s.curator.curatorName,
+                targetPlaylist: s.targetPlaylist || playlists[0]?.name || s.curator.curatorName,
+                songTitle: s.songTitle,
+                status: s.status,
+                curatorFeedback: s.curatorFeedback,
+                createdAt: s.createdAt.toISOString(),
+                updatedAt: s.updatedAt.toISOString(),
+            };
+        });
+    }
+    static async withdrawPitch(userId, submissionId) {
+        const existing = await prisma_js_1.prisma.curatorSubmission.findFirst({
+            where: { id: submissionId, artistUserId: userId },
+        });
+        if (!existing) {
+            throw new Error('Pitch not found.');
+        }
+        if (existing.status === 'ADDED' || existing.status === 'DECLINED') {
+            throw new Error('This pitch has already been reviewed by the curator.');
+        }
+        await prisma_js_1.prisma.curatorSubmission.delete({ where: { id: existing.id } });
+        return { id: existing.id };
     }
 }
 exports.CuratorService = CuratorService;

@@ -78,5 +78,49 @@ class CuratorController {
             res.status(500).json({ success: false, message: 'Failed to load curators directory' });
         }
     }
+    static async submitPitch(req, res) {
+        try {
+            if (!req.user?.userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const handle = req.params.handle;
+            const submission = await curator_service_js_1.CuratorService.submitPitchToCurator(req.user.userId, handle, req.body || {});
+            res.status(201).json({ success: true, submission });
+        }
+        catch (error) {
+            console.error('[CuratorController.submitPitch error]:', error);
+            res.status(400).json({ success: false, message: error.message || 'Failed to submit pitch' });
+        }
+    }
+    static async getMyPitches(req, res) {
+        try {
+            if (!req.user?.userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const pitches = await curator_service_js_1.CuratorService.getArtistPitches(req.user.userId);
+            res.status(200).json({ success: true, pitches });
+        }
+        catch (error) {
+            console.error('[CuratorController.getMyPitches error]:', error);
+            res.status(500).json({ success: false, message: 'Failed to load pitches' });
+        }
+    }
+    static async withdrawPitch(req, res) {
+        try {
+            if (!req.user?.userId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+            const submissionId = req.params.submissionId;
+            const result = await curator_service_js_1.CuratorService.withdrawPitch(req.user.userId, submissionId);
+            res.status(200).json({ success: true, ...result });
+        }
+        catch (error) {
+            console.error('[CuratorController.withdrawPitch error]:', error);
+            res.status(400).json({ success: false, message: error.message || 'Failed to withdraw pitch' });
+        }
+    }
 }
 exports.CuratorController = CuratorController;

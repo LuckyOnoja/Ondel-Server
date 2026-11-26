@@ -77,4 +77,48 @@ export class CuratorController {
       res.status(500).json({ success: false, message: 'Failed to load curators directory' });
     }
   }
+
+  static async submitPitch(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+      const handle = req.params.handle as string;
+      const submission = await CuratorService.submitPitchToCurator(req.user.userId, handle, req.body || {});
+      res.status(201).json({ success: true, submission });
+    } catch (error: any) {
+      console.error('[CuratorController.submitPitch error]:', error);
+      res.status(400).json({ success: false, message: error.message || 'Failed to submit pitch' });
+    }
+  }
+
+  static async getMyPitches(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+      const pitches = await CuratorService.getArtistPitches(req.user.userId);
+      res.status(200).json({ success: true, pitches });
+    } catch (error: any) {
+      console.error('[CuratorController.getMyPitches error]:', error);
+      res.status(500).json({ success: false, message: 'Failed to load pitches' });
+    }
+  }
+
+  static async withdrawPitch(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user?.userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+      const submissionId = req.params.submissionId as string;
+      const result = await CuratorService.withdrawPitch(req.user.userId, submissionId);
+      res.status(200).json({ success: true, ...result });
+    } catch (error: any) {
+      console.error('[CuratorController.withdrawPitch error]:', error);
+      res.status(400).json({ success: false, message: error.message || 'Failed to withdraw pitch' });
+    }
+  }
 }
