@@ -7,6 +7,8 @@ export interface AuthenticatedUser {
   email: string;
   authProvider: string;
   isAdmin?: boolean;
+  isCurator?: boolean;
+  role?: string;
 }
 
 export interface AuthRequest extends Request {

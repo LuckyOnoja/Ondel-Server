@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.generateToken = generateToken;
 exports.sendOtp = sendOtp;
 exports.verifyOtp = verifyOtp;
 exports.googleAuth = googleAuth;
@@ -20,8 +21,8 @@ function generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 // Generate JWT token
-function generateToken(userId, email, authProvider, isAdmin = false) {
-    return jsonwebtoken_1.default.sign({ userId, email, authProvider, isAdmin }, env_js_1.env.JWT_SECRET, { expiresIn: env_js_1.env.JWT_EXPIRES_IN });
+function generateToken(userId, email, authProvider, isAdmin = false, isCurator = false, role = 'MEMBER') {
+    return jsonwebtoken_1.default.sign({ userId, email, authProvider, isAdmin, isCurator, role }, env_js_1.env.JWT_SECRET, { expiresIn: env_js_1.env.JWT_EXPIRES_IN });
 }
 /**
  * Step 1: Request OTP
@@ -117,7 +118,7 @@ async function verifyOtp(req, res) {
             });
         }
         // Issue JWT Token
-        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
+        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin, user.isCurator, user.role);
         res.status(200).json({
             success: true,
             message: 'Authentication successful',
@@ -130,6 +131,8 @@ async function verifyOtp(req, res) {
                 authProvider: user.authProvider,
                 isVerified: user.isVerified,
                 isAdmin: user.isAdmin,
+                isCurator: user.isCurator,
+                role: user.role,
             },
         });
     }
@@ -215,7 +218,7 @@ async function googleAuth(req, res) {
             });
         }
         // Issue JWT Token
-        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin);
+        const token = generateToken(user.id, user.email, user.authProvider, user.isAdmin, user.isCurator, user.role);
         res.status(200).json({
             success: true,
             message: 'Google Authentication successful',
@@ -228,6 +231,8 @@ async function googleAuth(req, res) {
                 authProvider: user.authProvider,
                 isVerified: user.isVerified,
                 isAdmin: user.isAdmin,
+                isCurator: user.isCurator,
+                role: user.role,
             },
         });
     }
@@ -255,7 +260,16 @@ async function getCurrentUser(req, res) {
                 authProvider: true,
                 isVerified: true,
                 isAdmin: true,
+                isCurator: true,
+                role: true,
                 createdAt: true,
+                curatorProfile: {
+                    select: {
+                        id: true,
+                        curatorName: true,
+                        handle: true,
+                    },
+                },
             },
         });
         if (!user) {

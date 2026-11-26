@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const authMiddleware_js_1 = require("../../middleware/authMiddleware.js");
+const curator_controller_js_1 = require("./curator.controller.js");
+const router = (0, express_1.Router)();
+router.get('/directory', curator_controller_js_1.CuratorController.listDirectory);
+router.get('/me', authMiddleware_js_1.requireAuth, curator_controller_js_1.CuratorController.getMe);
+router.post('/register', authMiddleware_js_1.requireAuth, curator_controller_js_1.CuratorController.register);
+router.patch('/profile', authMiddleware_js_1.requireAuth, curator_controller_js_1.CuratorController.updateProfile);
+router.patch('/submissions/:submissionId', authMiddleware_js_1.requireAuth, curator_controller_js_1.CuratorController.updateSubmission);
+exports.default = router;
