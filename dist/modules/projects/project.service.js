@@ -674,6 +674,17 @@ class ProjectService {
                 console.warn('⚠️ [Cloudinary] Soft warning purging vault item resource:', cdnErr);
             }
         }
+        // Capture linked song titles & project owner before deleting so curator pitches cascade cleanly
+        const projectOwner = await prisma_js_1.prisma.project.findUnique({
+            where: { id: projectId },
+            select: { userId: true },
+        });
+        const linkedSongs = vaultItem.type === 'master' && vaultItem.fileUrl
+            ? await prisma_js_1.prisma.song.findMany({
+                where: { projectId, audioUrl: vaultItem.fileUrl },
+                select: { title: true },
+            })
+            : [];
         await prisma_js_1.prisma.vaultItem.delete({
             where: { id: vaultItemId },
         });
@@ -681,6 +692,26 @@ class ProjectService {
         if (vaultItem.type === 'master' && vaultItem.fileUrl) {
             await prisma_js_1.prisma.song.deleteMany({
                 where: { projectId, audioUrl: vaultItem.fileUrl },
+            });
+        }
+        // Cascade-remove any curator submissions tied to this deleted audio file or song title
+        const strippedName = vaultItem.name.replace(/\.[^/.]+$/, '').trim();
+        const matchTitles = Array.from(new Set([vaultItem.name.trim(), strippedName, ...linkedSongs.map((s) => s.title.trim())].filter(Boolean)));
+        const orClauses = [];
+        if (vaultItem.fileUrl) {
+            orClauses.push({ audioUrl: vaultItem.fileUrl });
+        }
+        if (projectOwner?.userId && matchTitles.length) {
+            for (const t of matchTitles) {
+                orClauses.push({
+                    artistUserId: projectOwner.userId,
+                    songTitle: { equals: t, mode: 'insensitive' },
+                });
+            }
+        }
+        if (orClauses.length) {
+            await prisma_js_1.prisma.curatorSubmission.deleteMany({
+                where: { OR: orClauses },
             });
         }
         return true;

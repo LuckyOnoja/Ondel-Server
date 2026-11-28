@@ -89,6 +89,96 @@ function sanitizePlaylists(input: unknown): CuratorPlaylistItem[] {
     .filter((p): p is CuratorPlaylistItem => p !== null);
 }
 
+function normalizeTrackKey(s?: string | null): string {
+  if (!s) return '';
+  return s.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+}
+
+/**
+ * Removes any CuratorSubmission whose artist deleted the underlying track/audio
+ * from their Vault/Project so curators never see dead/unplayable tracks.
+ */
+async function filterAndPurgeOrphanedSubmissions<
+  T extends { id: string; artistUserId: string | null; songTitle: string; audioUrl?: string | null }
+>(submissions: T[]): Promise<T[]> {
+  if (!submissions.length) return submissions;
+
+  const artistIds = Array.from(
+    new Set(submissions.map((s) => s.artistUserId).filter((id): id is string => Boolean(id)))
+  );
+  if (!artistIds.length) return submissions;
+
+  const [songs, projects] = await Promise.all([
+    prisma.song.findMany({
+      where: { artistId: { in: artistIds } },
+      select: { artistId: true, title: true, audioUrl: true },
+    }),
+    prisma.project.findMany({
+      where: { userId: { in: artistIds } },
+      select: {
+        userId: true,
+        vaultItems: { select: { name: true, fileUrl: true } },
+      },
+    }),
+  ]);
+
+  const urlsByArtist = new Map<string, Set<string>>();
+  const titlesByArtist = new Map<string, Set<string>>();
+
+  const addFor = (uid: string, title?: string | null, url?: string | null) => {
+    if (url) {
+      let set = urlsByArtist.get(uid);
+      if (!set) {
+        set = new Set();
+        urlsByArtist.set(uid, set);
+      }
+      set.add(url.trim());
+    }
+    const key = normalizeTrackKey(title);
+    if (key) {
+      let set = titlesByArtist.get(uid);
+      if (!set) {
+        set = new Set();
+        titlesByArtist.set(uid, set);
+      }
+      set.add(key);
+    }
+  };
+
+  for (const s of songs) addFor(s.artistId, s.title, s.audioUrl);
+  for (const p of projects) {
+    for (const v of p.vaultItems) addFor(p.userId, v.name, v.fileUrl);
+  }
+
+  const orphanIds: string[] = [];
+  const alive: T[] = [];
+
+  for (const sub of submissions) {
+    if (!sub.artistUserId) {
+      alive.push(sub);
+      continue;
+    }
+    const urls = urlsByArtist.get(sub.artistUserId);
+    const titles = titlesByArtist.get(sub.artistUserId);
+    const urlMatch = Boolean(sub.audioUrl && urls?.has(sub.audioUrl.trim()));
+    const titleMatch = Boolean(titles?.has(normalizeTrackKey(sub.songTitle)));
+
+    if (!urlMatch && !titleMatch) {
+      orphanIds.push(sub.id);
+    } else {
+      alive.push(sub);
+    }
+  }
+
+  if (orphanIds.length) {
+    await prisma.curatorSubmission.deleteMany({
+      where: { id: { in: orphanIds } },
+    });
+  }
+
+  return alive;
+}
+
 export class CuratorService {
   static async getCuratorWorkspace(userId: string) {
     const user = await prisma.user.findUnique({
@@ -117,7 +207,7 @@ export class CuratorService {
     if (!user) return null;
 
     const profile = user.curatorProfile;
-    const submissions = profile?.submissions ?? [];
+    const submissions = await filterAndPurgeOrphanedSubmissions(profile?.submissions ?? []);
     const playlists = sanitizePlaylists(profile?.playlists);
 
     const stats = {
@@ -382,6 +472,8 @@ export class CuratorService {
           orderBy: { updatedAt: 'desc' },
           select: {
             id: true,
+            artistUserId: true,
+            audioUrl: true,
             status: true,
             songTitle: true,
             artistName: true,
@@ -392,10 +484,14 @@ export class CuratorService {
       },
     });
 
+    const allSubs = profiles.flatMap((p) => p.submissions);
+    const aliveSet = new Set((await filterAndPurgeOrphanedSubmissions(allSubs)).map((s) => s.id));
+
     return profiles.map((p) => {
+      const liveSubs = p.submissions.filter((s) => aliveSet.has(s.id));
       const playlists = sanitizePlaylists(p.playlists);
-      const received = p.submissions.length;
-      const repliedSubs = p.submissions.filter((s) => s.status === 'ADDED' || s.status === 'DECLINED');
+      const received = liveSubs.length;
+      const repliedSubs = liveSubs.filter((s) => s.status === 'ADDED' || s.status === 'DECLINED');
       const replied = repliedSubs.length;
       let medianDays = 3;
       if (repliedSubs.length > 0) {
@@ -404,7 +500,7 @@ export class CuratorService {
           .sort((a, b) => a - b);
         medianDays = diffs[Math.floor(diffs.length / 2)];
       }
-      const recentAdds = p.submissions
+      const recentAdds = liveSubs
         .filter((s) => s.status === 'ADDED')
         .slice(0, 5)
         .map((s) => ({
@@ -507,7 +603,7 @@ export class CuratorService {
   }
 
   static async getArtistPitches(userId: string) {
-    const subs = await prisma.curatorSubmission.findMany({
+    const rawSubs = await prisma.curatorSubmission.findMany({
       where: { artistUserId: userId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -520,6 +616,8 @@ export class CuratorService {
         },
       },
     });
+
+    const subs = await filterAndPurgeOrphanedSubmissions(rawSubs);
 
     return subs.map((s) => {
       const playlists = sanitizePlaylists(s.curator.playlists);

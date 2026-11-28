@@ -447,6 +447,17 @@ export class SongService {
       where: { songId },
     });
 
+    // 2b. Cascade-remove curator pitches tied to this deleted song
+    const pitchOr: any[] = [
+      { artistUserId: song.artistId, songTitle: { equals: song.title, mode: 'insensitive' } },
+    ];
+    if (song.audioUrl) {
+      pitchOr.push({ audioUrl: song.audioUrl });
+    }
+    await prisma.curatorSubmission.deleteMany({
+      where: { OR: pitchOr },
+    });
+
     // 3. Delete song record from database
     await prisma.song.delete({
       where: { id: songId },
